@@ -4,12 +4,17 @@ import pygame
 import heapq
 import math
 import random
+import time
 from noise import snoise2
 
 
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
 NOISE_SEED = 0
+
+
+seed = time.clock()
+random.seed(seed)
 
 
 def road_from_dir(start, direction, length, is_highway, time_delay):
@@ -27,6 +32,7 @@ class RoadSegment:
         self.is_highway = is_highway
         self.t = time_delay
         self.got_snapped = False
+        self.is_branch = False
 
     def __lt__(self, other):
         return self.t < other.t
@@ -61,13 +67,7 @@ class RoadSegment:
         return math.sqrt(math.pow(x_diff, 2) + math.pow(y_diff, 2))
 
     def dir(self):
-        if self.end[0] - self.start[0] == 0:
-            if self.end[1] < self.start[1]:
-                return 270
-            else:
-                return 90
-
-        return math.degrees(math.atan((self.end[1] - self.start[1]) / (self.end[0] - self.start[0])))
+        return math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
 
     def as_rect(self):
         angle = self.dir()
@@ -123,6 +123,8 @@ def screen_to_world(screen_pos, pan, zoom):
 def draw_road(screen, road, pan, zoom):
     if road.is_highway:
         color = (255, 100, 100)
+        if road.is_branch:
+            color = (100, 100, 255)
     elif road.got_snapped:
         color = (100, 255, 100)
     else:
@@ -171,7 +173,7 @@ def zoom_change(prev, increment, center, pan): # center should be a screen coord
 
     world_pan = sub_lines(new_world, old_world)
 
-    print("Old: " + str(old_world) + ", New: " + str(new_world))
+    #print("Old: " + str(old_world) + ", New: " + str(new_world))
 
     return new_level, world_to_screen(world_pan, (0, 0), new_level)
 
@@ -229,6 +231,8 @@ def main():
                         zoom_increment -= 1
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
+                    global seed
+                    seed = time.clock()
                     roads = generate()
 
             #print(event)
@@ -247,13 +251,13 @@ def main():
         for road in roads:
             draw_road(screen, road, viewport_pos, zoom_level)
             start = world_to_screen(road.start, viewport_pos, zoom_level)
-            pygame.draw.circle(screen, (255, 100, 100), int_pos(start), 5)
+            #pygame.draw.circle(screen, (255, 100, 100), int_pos(start), 5)
             end = world_to_screen(road.end, viewport_pos, zoom_level)
-            pygame.draw.circle(screen, (255, 100, 255), int_pos(end), 4)
+            #pygame.draw.circle(screen, (255, 100, 255), int_pos(end), 4)
 
         for inter in all_intersections:
             moved_pos = world_to_screen(inter, viewport_pos, zoom_level)
-            #pygame.draw.circle(screen, (100, 100, 255), int_pos(moved_pos), 5)
+            pygame.draw.circle(screen, (100, 100, 255), int_pos(moved_pos), 5)
 
         label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)), True, (255, 255, 255))
         label_pan = gohu_font.render("Pan: " + str(viewport_pos[0]) + ", " + str(viewport_pos[1]), True, (255, 255, 255))
@@ -261,15 +265,21 @@ def main():
 
         road_collider = roads[0].as_rect()
         label_noise = gohu_font.render("Points: " + str(road_collider[0]) + str(road_collider[1]) + str(road_collider[2]) + str(road_collider[3]), True, (255, 255, 255))
+        label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
 
         screen.blit(label_mouse, (10, 10))
         screen.blit(label_pan, (10, 25))
         screen.blit(label_zoom, (10, 40))
         screen.blit(label_noise, (10, 55))
+        screen.blit(label_seed, (10, 70))
         pygame.display.flip()
 
 
 def generate():
+    random.seed(seed)
+    global all_intersections
+    all_intersections = []
+
     road_queue = RoadQueue()
     road_queue.push(RoadSegment((0, 0), (HIGHWAY_LENGTH, 0), True))
 
@@ -405,8 +415,6 @@ def global_goals(previous_segment: RoadSegment):
         wiggle_seg = previous_segment.make_extension(previous_segment.dir() + wiggle_highway())
         wiggle_pop = population_level(wiggle_seg)
 
-        ext_pop = 0
-
         if wiggle_pop > straight_pop:
             new_segments.append(wiggle_seg)
             ext_pop = wiggle_pop
@@ -417,6 +425,7 @@ def global_goals(previous_segment: RoadSegment):
         if ext_pop > 0.1 and random.random() < 0.1:
             sign = random.randrange(-1, 2, 2)
             branch = previous_segment.make_extension(previous_segment.dir() + (90 * sign) + wiggle_branch())
+            branch.is_branch = True
             new_segments.append(branch)
 
     if straight_pop > 0.1:
@@ -427,6 +436,7 @@ def global_goals(previous_segment: RoadSegment):
             sign = random.randrange(-1, 2, 2)
             delay = 5 if previous_segment.is_highway else 0
             branch = previous_segment.make_branch(previous_segment.dir() + (90 * sign) + wiggle_branch(), delay)
+            branch.is_branch = True
             new_segments.append(branch)
 
     return new_segments
