@@ -13,7 +13,7 @@ STREET_LENGTH = 300
 NOISE_SEED = 0
 
 
-seed = time.clock()
+seed = time.process_time()
 random.seed(seed)
 
 
@@ -232,7 +232,7 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     global seed
-                    seed = time.clock()
+                    seed = time.process_time()
                     roads = generate()
 
             #print(event)
@@ -286,7 +286,7 @@ def generate():
     segments = []
 
     loop_count = 0
-    while not road_queue.is_empty() and loop_count < 500:
+    while not road_queue.is_empty() and len(segments) < 500:
         seg = road_queue.pop()
 
         if local_constraints(seg, segments):
@@ -297,7 +297,7 @@ def generate():
             for new_seg in new_segments:
                 delayed_seg = new_seg.copy()
                 delayed_seg.t = seg.t + 1 + delayed_seg.t
-                road_queue.push(new_seg)
+                road_queue.push(delayed_seg)
         loop_count += 1
 
     return segments
@@ -374,9 +374,6 @@ def local_constraints(inspect_seg, segments):
         # check if closest point to inspect_seg's end is within the snapping radius
         # changes the road's angle instead of extending
 
-    if inspect_seg.is_highway:
-        if random.random() > 0.90:
-            return False
     return True
 
 
