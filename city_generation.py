@@ -47,6 +47,7 @@ class RoadSegment:
 
         self.links_s = []
         self.links_e = []
+        self.settled = False
 
         self.insertion_order = 0
 
@@ -110,19 +111,26 @@ class RoadSegment:
 
     def connect_links(self):
         for road in self.links_s:
-            if self.start == road.end:
+            if not road.settled:
+                continue
+
+            if self.start == road.end and self not in road.links_e:
                 road.links_e.append(self)
-            elif self.start == road.start:
+            elif self.start == road.start and self not in road.links_s:
                 road.links_s.append(self)
             else:
                 print("This shouldn't happen but it might rn")
         for road in self.links_e:
-            if self.end == road.end:
+            if not road.settled:
+                continue
+
+            if self.end == road.end and self not in road.links_e:
                 road.links_e.append(self)
-            elif self.end == road.start:
+            elif self.end == road.start and self not in road.links_s:
                 road.links_s.append(self)
             else:
                 print("This shouldn't happen but it might rn")
+        self.settled = True
 
 
 class RoadQueue:
@@ -152,7 +160,7 @@ def screen_to_world(screen_pos, pan, zoom):
     return result
 
 
-def draw_road(screen, road, pan, zoom):
+def draw_road(screen, road, selected_road, pan, zoom):
     width = 2
     color = (255, 255, 255)
 
@@ -166,6 +174,8 @@ def draw_road(screen, road, pan, zoom):
             color = (100, 255, 100)
         elif road.has_snapped == SnapType.Extend:
             color = (100, 100, 255)
+    if road is selected_road:
+        width = 8
 
     #print(road.is_highway)
 
@@ -237,12 +247,16 @@ def main():
 
     running = True
 
-    roads = generate()
+    roads = generate(0.570463956)
+    selected_road = None
+    selected_start_ids = []
+    selected_end_ids = []
 
     zoom_level = 1
     zoom_increment = 0
 
     prev_mouse = (0, 0)
+    drag_start = None
     viewport_pos = (0, 0)
     prev_pressed = (False, False, False)
 
@@ -295,31 +309,50 @@ def main():
             if pygame.mouse.get_pressed()[0]:
                 viewport_pos = add_lines(viewport_pos, sub_lines(pygame.mouse.get_pos(), prev_mouse))
                 prev_mouse = pygame.mouse.get_pos()
+            else:
+                if pygame.mouse.get_pos() == drag_start:
+                    closest = (None, 9999)
+                    for road in roads:
+                        dist = dist_points(screen_to_world(drag_start, viewport_pos, zoom_level), point_on_road(road, 0.5))
+                        if dist < closest[1]:
+                            closest = (road, dist)
+                    if closest[1] < 100:
+                        selected_road = closest[0]
+                        selected_start_ids = []
+                        selected_end_ids = []
+                        for road in selected_road.links_s:
+                            selected_start_ids.append(road.insertion_order)
+                        for road in selected_road.links_e:
+                            selected_end_ids.append(road.insertion_order)
+                    else:
+                        selected_road = None
+                drag_start = None
         else:
             if pygame.mouse.get_pressed()[0]:
+                drag_start = pygame.mouse.get_pos()
                 prev_mouse = pygame.mouse.get_pos()
         prev_pressed = pygame.mouse.get_pressed()
 
         #draw_heatmap(screen, 100, viewport_pos, zoom_level)
 
         for road in roads:
-            draw_road(screen, road, viewport_pos, zoom_level)
+            draw_road(screen, road, selected_road, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
             label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)), True, (255, 255, 255))
             label_pan = gohu_font.render("Pan: " + str(viewport_pos[0]) + ", " + str(viewport_pos[1]), True, (255, 255, 255))
             label_zoom = gohu_font.render("Zoom: " + str(zoom_level) + "x", True, (255, 255, 255))
 
-            road_collider = roads[0].as_rect()
-            label_noise = gohu_font.render(
-                "Points: " + str(road_collider[0]) + str(road_collider[1]) + str(road_collider[2]) + str(
-                    road_collider[3]), True, (255, 255, 255))
+            label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
+            if selected_road is not None:
+                label_selected = gohu_font.render("Selected: links_s: " + str(selected_start_ids) + " links_end: " + str(selected_end_ids), True, (255, 255, 255))
+
             label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
 
             screen.blit(label_mouse, (10, 10))
             screen.blit(label_pan, (10, 25))
             screen.blit(label_zoom, (10, 40))
-            screen.blit(label_noise, (10, 55))
+            screen.blit(label_selected, (10, 55))
             screen.blit(label_seed, (10, 70))
 
         if DEBUG_ROAD_ORDER:
@@ -380,36 +413,6 @@ def segment_length(point1, point2):
     diff = sub_lines(point1, point2)
 
     return math.sqrt((diff[0] * diff[0]) + (diff[1] * diff[1]))
-
-
-def snap_to_cross(mod_road, other_road, crossing):
-    aa = math.fabs(other_road.dir() - mod_road.dir()) % 180
-    angle_diff = min(aa, math.fabs(aa - 180))
-    if angle_diff < 30:
-        return False
-    # if the lines are not too similar, then cut the inspecting segment down to the intersection
-    all_intersections.append(crossing)
-
-    # print("inspect_seg: " + str(inspect_seg.start) + ", " + str(inspect_seg.end) + " line: " + str(line.start) + ", " + str(line.end) + " Intersection: " + str(inter))
-    mod_road.end = crossing
-    mod_road.has_snapped = SnapType.Cross
-    return True
-
-
-def snap_to_end(mod_road, other_road):
-    mod_road.end = (other_road.end[0], other_road.end[1])
-
-    # when I add links, check that this doesn't create a really acute intersection
-
-    mod_road.has_snapped = SnapType.End
-    return True
-
-
-def snap_to_extend(mod_road, point):
-    mod_road.end = (point[0], point[1])
-
-    mod_road.has_snapped = SnapType.Extend
-    return True
 
 
 def population_level(seg):
@@ -508,6 +511,9 @@ def global_goals(previous_segment: RoadSegment):
 
     for seg in new_segments:
         seg.links_s.append(previous_segment)
+        for others in new_segments:
+            if others is not seg:
+                seg.links_s.append(others)
 
     return new_segments
 
@@ -543,6 +549,35 @@ def local_constraints(inspect_seg, segments):
 
     if action is not None:
         return action(None)
+    return True
+
+
+def snap_to_cross(mod_road, other_road, crossing):
+    aa = math.fabs(other_road.dir() - mod_road.dir()) % 180
+    angle_diff = min(aa, math.fabs(aa - 180))
+    if angle_diff < 30:
+        return False
+    # if the lines are not too similar, then cut the inspecting segment down to the intersection
+    all_intersections.append(crossing)
+
+    mod_road.end = crossing
+    mod_road.has_snapped = SnapType.Cross
+    return True
+
+
+def snap_to_end(mod_road, other_road):
+    mod_road.end = (other_road.end[0], other_road.end[1])
+
+    # when I add links, check that this doesn't create a really acute intersection
+
+    mod_road.has_snapped = SnapType.End
+    return True
+
+
+def snap_to_extend(mod_road, point):
+    mod_road.end = (point[0], point[1])
+
+    mod_road.has_snapped = SnapType.Extend
     return True
 
 
