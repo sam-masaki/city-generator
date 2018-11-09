@@ -45,6 +45,9 @@ class RoadSegment:
         self.has_snapped = SnapType.No
         self.is_branch = False
 
+        self.links_s = []
+        self.links_e = []
+
         self.insertion_order = 0
 
     def __lt__(self, other):
@@ -104,6 +107,22 @@ class RoadSegment:
         # may not be needed since the tmwhere citygen checks for collision to weed out unneccesary checks, but I think
         # separating into sectors will work better
         return True
+
+    def connect_links(self):
+        for road in self.links_s:
+            if self.start == road.end:
+                road.links_e.append(self)
+            elif self.start == road.start:
+                road.links_s.append(self)
+            else:
+                print("This shouldn't happen but it might rn")
+        for road in self.links_e:
+            if self.end == road.end:
+                road.links_e.append(self)
+            elif self.end == road.start:
+                road.links_s.append(self)
+            else:
+                print("This shouldn't happen but it might rn")
 
 
 class RoadQueue:
@@ -334,14 +353,14 @@ def generate(manual_seed=None):
 
         if local_constraints(seg, segments):
             seg.insertion_order = loop_count
+            seg.connect_links()
             segments.append(seg)
 
             new_segments = global_goals(seg)
 
             for new_seg in new_segments:
-                delayed_seg = new_seg.copy()
-                delayed_seg.t = seg.t + 1 + delayed_seg.t
-                road_queue.push(delayed_seg)
+                new_seg.t = seg.t + 1 + new_seg.t
+                road_queue.push(new_seg)
         loop_count += 1
 
     return segments
@@ -525,6 +544,9 @@ def global_goals(previous_segment: RoadSegment):
             branch = previous_segment.make_branch(previous_segment.dir() + (90 * sign) + wiggle_branch(), delay)
             branch.is_branch = True
             new_segments.append(branch)
+
+    for seg in new_segments:
+        seg.links_s.append(previous_segment)
 
     return new_segments
 
