@@ -331,41 +331,6 @@ def main():
         pygame.display.flip()
 
 
-def generate(manual_seed=None):
-    global seed
-    if manual_seed is None:
-        seed = time.process_time()
-    else:
-        seed = manual_seed
-
-    random.seed(seed)
-    global all_intersections
-    all_intersections = []
-
-    road_queue = RoadQueue()
-    road_queue.push(RoadSegment((0, 0), (HIGHWAY_LENGTH, 0), True))
-
-    segments = []
-
-    loop_count = 0
-    while not road_queue.is_empty() and len(segments) <= 500:
-        seg = road_queue.pop()
-
-        if local_constraints(seg, segments):
-            seg.insertion_order = loop_count
-            seg.connect_links()
-            segments.append(seg)
-
-            new_segments = global_goals(seg)
-
-            for new_seg in new_segments:
-                new_seg.t = seg.t + 1 + new_seg.t
-                road_queue.push(new_seg)
-        loop_count += 1
-
-    return segments
-
-
 def add_lines(l1, l2):
     return l1[0] + l2[0], l1[1] + l2[1]
 
@@ -417,48 +382,6 @@ def segment_length(point1, point2):
     return math.sqrt((diff[0] * diff[0]) + (diff[1] * diff[1]))
 
 
-def local_constraints(inspect_seg, segments):
-    # for collisions with other roads, they should be treated like boxes with widths of 6 and 16 depending on highway
-
-    # check for collisions and a minimum difference in angle
-    # actually just check for intersections, fail if the angles are similar
-
-    extras = []
-
-    priority = 0
-    action = None
-    last_inter_t = 1
-    last_ext_t = 999
-
-    for line in segments:
-        inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
-        if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
-            last_inter_t = inter[1]
-            priority = 4
-
-            action = lambda _, line=line, inter=inter[0]: snap_to_cross(inspect_seg, line, inter)
-            # ????consider finding nearby roads and delete if too similar
-
-        if segment_length(line.end, inspect_seg.end) < 50 and priority <= 3:
-            priority = 3
-
-            action = lambda _, line=line: snap_to_end(inspect_seg, line)
-
-        if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
-            if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < 50:
-                last_ext_t = inter[1]
-                point = inter[0]
-                action = lambda _, point=point: snap_to_extend(inspect_seg, point)
-                priority = 2
-
-    if action is not None:
-        return action(None)
-    return True
-
-        # check if closest point to inspect_seg's end is within the snapping radius
-        # changes the road's angle instead of extending
-
-
 def snap_to_cross(mod_road, other_road, crossing):
     aa = math.fabs(other_road.dir() - mod_road.dir()) % 180
     angle_diff = min(aa, math.fabs(aa - 180))
@@ -472,6 +395,7 @@ def snap_to_cross(mod_road, other_road, crossing):
     mod_road.has_snapped = SnapType.Cross
     return True
 
+
 def snap_to_end(mod_road, other_road):
     mod_road.end = (other_road.end[0], other_road.end[1])
 
@@ -480,11 +404,13 @@ def snap_to_end(mod_road, other_road):
     mod_road.has_snapped = SnapType.End
     return True
 
+
 def snap_to_extend(mod_road, point):
     mod_road.end = (point[0], point[1])
 
     mod_road.has_snapped = SnapType.Extend
     return True
+
 
 def population_level(seg):
     return (population_point(seg.start) + population_point(seg.end)) / 2
@@ -506,6 +432,41 @@ def wiggle_highway():
 
 def wiggle_branch():
     return random.randint(-3, 3)
+
+
+def generate(manual_seed=None):
+    global seed
+    if manual_seed is None:
+        seed = time.process_time()
+    else:
+        seed = manual_seed
+
+    random.seed(seed)
+    global all_intersections
+    all_intersections = []
+
+    road_queue = RoadQueue()
+    road_queue.push(RoadSegment((0, 0), (HIGHWAY_LENGTH, 0), True))
+
+    segments = []
+
+    loop_count = 0
+    while not road_queue.is_empty() and len(segments) <= 500:
+        seg = road_queue.pop()
+
+        if local_constraints(seg, segments):
+            seg.insertion_order = loop_count
+            seg.connect_links()
+            segments.append(seg)
+
+            new_segments = global_goals(seg)
+
+            for new_seg in new_segments:
+                new_seg.t = seg.t + 1 + new_seg.t
+                road_queue.push(new_seg)
+        loop_count += 1
+
+    return segments
 
 
 def global_goals(previous_segment: RoadSegment):
@@ -549,6 +510,40 @@ def global_goals(previous_segment: RoadSegment):
         seg.links_s.append(previous_segment)
 
     return new_segments
+
+
+def local_constraints(inspect_seg, segments):
+    extras = []
+
+    priority = 0
+    action = None
+    last_inter_t = 1
+    last_ext_t = 999
+
+    for line in segments:
+        inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
+        if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
+            last_inter_t = inter[1]
+            priority = 4
+
+            action = lambda _, line=line, inter=inter[0]: snap_to_cross(inspect_seg, line, inter)
+            # ????consider finding nearby roads and delete if too similar
+
+        if segment_length(line.end, inspect_seg.end) < 50 and priority <= 3:
+            priority = 3
+
+            action = lambda _, line=line: snap_to_end(inspect_seg, line)
+
+        if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
+            if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < 50:
+                last_ext_t = inter[1]
+                point = inter[0]
+                action = lambda _, point=point: snap_to_extend(inspect_seg, point)
+                priority = 2
+
+    if action is not None:
+        return action(None)
+    return True
 
 
 if __name__ == "__main__":
