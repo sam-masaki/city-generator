@@ -11,7 +11,7 @@ from noise import snoise2
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
 NOISE_SEED = 0
-
+SCREEN_RES = (1280, 720)
 
 seed = time.process_time()
 random.seed(seed)
@@ -31,11 +31,17 @@ class RoadSegment:
         self.end = end
         self.is_highway = is_highway
         self.t = time_delay
-        self.got_snapped = False
+        self.snap_to_cross = False
+        self.snap_to_end = False
         self.is_branch = False
+
+        self.insertion_order = 0
 
     def __lt__(self, other):
         return self.t < other.t
+
+    def __gt__(self, other):
+        return self.t > other.t
 
     def __eq__(self, other):
         if other is None:
@@ -95,11 +101,9 @@ class RoadQueue:
 
     def __init__(self):
         self.heap = []
-        self.item_number = 0
 
     def push(self, segment):
         heapq.heappush(self.heap, segment)
-        self.item_number += 1
 
     def pop(self):
         return heapq.heappop(self.heap)
@@ -125,10 +129,12 @@ def draw_road(screen, road, pan, zoom):
         color = (255, 100, 100)
         if road.is_branch:
             color = (100, 100, 255)
-    elif road.got_snapped:
+    elif road.snap_to_cross:
         color = (100, 255, 100)
     else:
         color = (255, 255, 255)
+    if road.snap_to_end:
+        color = (100, 255, 255)
 
     #print(road.is_highway)
 
@@ -159,7 +165,14 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
             screen_point = (x * square_size,
                             y * square_size)
 
-            draw_square(screen, screen_point, population_point(world_point), square_size)
+            intensity = population_point(world_point)
+            color = (0, max(min(intensity * 200, 255), 0), 0)
+
+            pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
+            dim = (square_size, square_size)
+
+            square = pygame.Rect(screen_point, dim)
+            pygame.draw.rect(screen, color, square)
 
 
 def zoom_change(prev, increment, center, pan): # center should be a screen coordinate, not a transformed world pos
@@ -189,13 +202,11 @@ def int_pos(float_tuple):
 def main():
     pygame.init()
 
-    screen = pygame.display.set_mode((1280, 720))
+    screen = pygame.display.set_mode(SCREEN_RES)
 
     running = True
 
     roads = generate()
-
-    #roads.append(RoadSegment((0, 0), (0, HIGHWAY_LENGTH), False))
 
     zoom_level = 1
     zoom_increment = 0
@@ -207,6 +218,13 @@ def main():
     gohu_font = pygame.font.SysFont("GohuFont", 11)
 
     prev_time = pygame.time.get_ticks()
+
+    road_labels = []
+
+    for road in roads:
+        road_labels.append((gohu_font.render(str(road.insertion_order), True, (255, 255, 255)),
+                            point_on_road(road, 0.5),
+                            road.insertion_order))
 
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
@@ -231,11 +249,7 @@ def main():
                         zoom_increment -= 1
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
-                    global seed
-                    seed = time.process_time()
                     roads = generate()
-
-            #print(event)
 
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
@@ -250,14 +264,11 @@ def main():
 
         for road in roads:
             draw_road(screen, road, viewport_pos, zoom_level)
-            start = world_to_screen(road.start, viewport_pos, zoom_level)
-            #pygame.draw.circle(screen, (255, 100, 100), int_pos(start), 5)
-            end = world_to_screen(road.end, viewport_pos, zoom_level)
-            #pygame.draw.circle(screen, (255, 100, 255), int_pos(end), 4)
 
         for inter in all_intersections:
             moved_pos = world_to_screen(inter, viewport_pos, zoom_level)
-            pygame.draw.circle(screen, (100, 100, 255), int_pos(moved_pos), 5)
+            if -20 < moved_pos[0] < SCREEN_RES[0] and -20 < moved_pos[1] < SCREEN_RES[1]:
+                pygame.draw.circle(screen, (100, 100, 255), int_pos(moved_pos), 5)
 
         label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)), True, (255, 255, 255))
         label_pan = gohu_font.render("Pan: " + str(viewport_pos[0]) + ", " + str(viewport_pos[1]), True, (255, 255, 255))
@@ -272,10 +283,22 @@ def main():
         screen.blit(label_zoom, (10, 40))
         screen.blit(label_noise, (10, 55))
         screen.blit(label_seed, (10, 70))
+
+        for label in road_labels:
+            label_pos = world_to_screen(label[1], viewport_pos, zoom_level)
+            if -20 < label_pos[0] < SCREEN_RES[0] and -20 < label_pos[1] < SCREEN_RES[1]:
+                screen.blit(label[0], label_pos)
+
         pygame.display.flip()
 
 
-def generate():
+def generate(manual_seed=None):
+    global seed
+    if manual_seed is None:
+        seed = time.process_time()
+    else:
+        seed = manual_seed
+
     random.seed(seed)
     global all_intersections
     all_intersections = []
@@ -286,10 +309,11 @@ def generate():
     segments = []
 
     loop_count = 0
-    while not road_queue.is_empty() and len(segments) < 500:
+    while not road_queue.is_empty() and len(segments) <= 698:
         seg = road_queue.pop()
 
         if local_constraints(seg, segments):
+            seg.insertion_order = loop_count
             segments.append(seg)
 
             new_segments = global_goals(seg)
@@ -329,9 +353,14 @@ def find_intersect(p, pe, q, qe):
     t = tNumerator / denominator
 
     if 0 < t < 1 and 0 < u < 1:
-        return p[0] + (t * r[0]), p[1] + (t * r[1])
+        return (p[0] + (t * r[0]), p[1] + (t * r[1])), t
 
     return None
+
+
+def point_on_road(road, factor):
+    end_vector = sub_lines(road.end, road.start)
+    return road.start[0] + (factor * end_vector[0]), road.start[1] + (factor * end_vector[1])
 
 
 all_intersections = []
@@ -351,31 +380,59 @@ def local_constraints(inspect_seg, segments):
 
     extras = []
 
+    priority = 0
+    action = None
+    last_inter_t = 1
+
     for line in segments:
-        inter = find_intersect(line.start, line.end, inspect_seg.start, inspect_seg.end)
-        if inter is not None:
-            aa = math.fabs(line.dir() - inspect_seg.dir()) % 180
-            angle_diff = min(aa, math.fabs(aa - 180))
-            if angle_diff < 30:
-                return False
-            # if the lines are not too similar, then cut the inspecting segment down to the intersection
-            all_intersections.append(inter)
-            
-            #print("inspect_seg: " + str(inspect_seg.start) + ", " + str(inspect_seg.end) + " line: " + str(line.start) + ", " + str(line.end) + " Intersection: " + str(inter))
-            inspect_seg.end = inter
-            inspect_seg.got_snapped = True
-        # ????consider finding nearby roads and delete if too similar
+        inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
+        if inter is not None and inter[1] < last_inter_t and priority <= 4:
+            last_inter_t = inter[1]
+            priority = 4
 
-        if segment_length(line.end, inspect_seg.end) < 50:
-            inspect_seg.got_snapped = True
+            action = lambda _, line=line, inter=inter[0]: snap_to_cross(inspect_seg, line, inter)
+            # ????consider finding nearby roads and delete if too similar
+
+        if segment_length(line.end, inspect_seg.end) < 50 and priority <= 3:
+            priority = 3
+
+            action = lambda _, line=line: snap_to_end(inspect_seg, line)
+
+
             # check for existing lines later, when I do links between roads
+        if False and priority <= 2:
+            priority = 2
 
+    if action is not None:
+        return action(None)
+    return True
 
         # check if closest point to inspect_seg's end is within the snapping radius
         # changes the road's angle instead of extending
 
+
+def snap_to_cross(mod_road, other_road, crossing):
+    aa = math.fabs(other_road.dir() - mod_road.dir()) % 180
+    angle_diff = min(aa, math.fabs(aa - 180))
+    if angle_diff < 30:
+        return False
+    # if the lines are not too similar, then cut the inspecting segment down to the intersection
+    all_intersections.append(crossing)
+
+    # print("inspect_seg: " + str(inspect_seg.start) + ", " + str(inspect_seg.end) + " line: " + str(line.start) + ", " + str(line.end) + " Intersection: " + str(inter))
+    mod_road.end = crossing
+    mod_road.snap_to_cross = True
+    mod_road.snap_to_end = False
     return True
 
+def snap_to_end(mod_road, other_road):
+    mod_road.end = (other_road.end[0], other_road.end[1])
+    mod_road.snap_to_cross = False
+    mod_road.snap_to_end = True
+    return True
+
+def snap_to_extend():
+    return True
 
 def population_level(seg):
     return (population_point(seg.start) + population_point(seg.end)) / 2
@@ -402,7 +459,7 @@ def wiggle_branch():
 def global_goals(previous_segment: RoadSegment):
     new_segments = []
 
-    if previous_segment.got_snapped:
+    if previous_segment.snap_to_cross or previous_segment.snap_to_end:
         return new_segments
 
     straight_seg = previous_segment.make_extension(previous_segment.dir())
