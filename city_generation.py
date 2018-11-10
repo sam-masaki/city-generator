@@ -593,9 +593,9 @@ def snap_to_cross(mod_road, other_road, crossing):
     # is how to do that without wasting a ton of calculations, since this seems to happen a fair amount (at least the
     # crossing is too close part). Dividing the full list of segments into sectors could make that recalculation be ok
     if crossing[2] < 0.05:
-        snap_to_vert(mod_road, other_road, False, True)
+        return snap_to_vert(mod_road, other_road, False, True)
     elif crossing[2] > 0.95:
-        snap_to_vert(mod_road, other_road, True, True)
+        return snap_to_vert(mod_road, other_road, True, True)
     else:
         all_intersections.append(crossing[0])
 
