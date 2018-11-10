@@ -13,12 +13,24 @@ DEBUG_HEATMAP = False
 
 DEBUG_NEW_FEATURE = False
 
+NOISE_SEED = (0, 0)
+
+# Configuration Constants:
+MAX_SEGS = 1000
+SCREEN_RES = (1920, 1080)
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
-NOISE_SEED = (0, 0)
-SCREEN_RES = (1920, 1080)
 
-MAX_SEGS = 1000
+HIGHWAY_BRANCH_POP = 0.1
+HIGHWAY_BRANCH_CHANCE = 0.1
+STREET_BRANCH_POP = 0.1
+STREET_BRANCH_CHANCE = 0.8
+STREET_EXTEND_POP = 0.1
+
+SNAP_VERTEX_RADIUS = 50
+SNAP_EXTEND_RADIUS = 50
+
+MIN_ANGLE_DIFF = 30
 
 seed = time.process_time()
 random.seed(seed)
@@ -475,7 +487,11 @@ def angle_between(a1, a2):
         a2 += 360
 
     reg = math.fabs(a1 - a2)
-    return min(reg, math.fabs(reg - 360))
+    res = min(reg, math.fabs(reg - 360))
+
+    #print("a1: {}, a2: {}, diff: {}".format(str(a1), str(a2), str(res)))
+
+    return res
 
 
 def segment_length(point1, point2):
@@ -562,17 +578,18 @@ def global_goals(previous_segment: RoadSegment):
             new_segments.append(straight_seg)
             ext_pop = straight_pop
 
-        if ext_pop > 0.1 and random.random() < 0.1:
+        if ext_pop > HIGHWAY_BRANCH_POP and random.random() < HIGHWAY_BRANCH_CHANCE:
             sign = random.randrange(-1, 2, 2)
             branch = previous_segment.make_extension(previous_segment.dir() + (90 * sign) + wiggle_branch())
             branch.is_branch = True
             new_segments.append(branch)
 
-    if straight_pop > 0.1:
+    if straight_pop > STREET_EXTEND_POP:
         if not previous_segment.is_highway:
             new_segments.append(straight_seg)
 
-        if random.random() < 0.8:
+    if straight_pop > STREET_BRANCH_POP:
+        if random.random() < STREET_BRANCH_CHANCE:
             sign = random.randrange(-1, 2, 2)
             delay = 5 if previous_segment.is_highway else 0
             branch = previous_segment.make_branch(previous_segment.dir() + (90 * sign) + wiggle_branch(), delay)
@@ -596,8 +613,6 @@ def local_constraints(inspect_seg, segments):
     last_inter_t = 1
     last_ext_t = 999
 
-
-
     for line in segments:
         inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
         if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
@@ -607,13 +622,13 @@ def local_constraints(inspect_seg, segments):
             action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, line, inter)
             # ????consider finding nearby roads and delete if too similar
 
-        if segment_length(line.end, inspect_seg.end) < 50 and priority <= 3:
+        if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
             priority = 3
 
             action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
 
         if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
-            if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < 50:
+            if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
                 last_ext_t = inter[1]
                 point = inter[0]
                 action = lambda _, point=point: snap_to_extend(inspect_seg, point)
@@ -633,7 +648,7 @@ def local_constraints(inspect_seg, segments):
                     if angle < 0:
                         angle += 360
 
-                if angle_between(inspect_seg.dir(), angle) < 30:
+                if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
                     return False
         break
 
@@ -645,7 +660,7 @@ def local_constraints(inspect_seg, segments):
 def snap_to_cross(mod_road, other_road, crossing):
     aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
-    if angle_diff < 30:
+    if angle_diff < MIN_ANGLE_DIFF:
         return False
 
     # @FIX Crossings that are really close to existing intersections shouldn't happen; in that case, snap_to_end should
@@ -676,7 +691,7 @@ def snap_to_vert(mod_road, other_road, end, too_close):
         if other_angle < 0:
             other_angle += 360
 
-    if angle_between(mod_road.dir(), other_angle) < 30:
+    if angle_between(mod_road.dir(), other_angle) < MIN_ANGLE_DIFF:
         return False
 
     for road in examine_links:
@@ -687,7 +702,7 @@ def snap_to_vert(mod_road, other_road, end, too_close):
             if angle < 0:
                 angle += 360
 
-        if angle_between(mod_road.dir(), angle) < 30:
+        if angle_between(mod_road.dir(), angle) < MIN_ANGLE_DIFF:
             return False
 
     mod_road.end = linking_point
