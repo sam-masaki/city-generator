@@ -57,13 +57,6 @@ class RoadSegment:
     def __gt__(self, other):
         return self.t > other.t
 
-    def __eq__(self, other):
-        if other is None:
-            return False
-        if not isinstance(other, RoadSegment):
-            return False
-        return self.t == other.t
-
     def copy(self):
         return RoadSegment(self.start, self.end, self.is_highway, self.t)
 
@@ -112,6 +105,7 @@ class RoadSegment:
     def connect_links(self):
         for road in self.links_s:
             if not road.settled:
+                self.links_s.remove(road)
                 continue
 
             if self.start == road.end and self not in road.links_e:
@@ -122,6 +116,7 @@ class RoadSegment:
                 print("This shouldn't happen but it might rn")
         for road in self.links_e:
             if not road.settled:
+                self.links_e.remove(road)
                 continue
 
             if self.end == road.end and self not in road.links_e:
