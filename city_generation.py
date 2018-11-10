@@ -39,6 +39,8 @@ def road_from_dir(start, direction, length, is_highway, time_delay):
 
 
 class RoadSegment:
+    seg_id = 0
+
     def __init__(self, start, end, is_highway, time_delay=0):
         self.start = start
         self.end = end
@@ -52,6 +54,9 @@ class RoadSegment:
         self.settled = False
 
         self.insertion_order = 0
+        self.global_id = RoadSegment.seg_id
+
+        RoadSegment.seg_id += 1
 
     def __lt__(self, other):
         return self.t < other.t
@@ -259,7 +264,7 @@ def main():
 
     running = True
 
-    roads = generate(0.570463956)
+    roads = generate()
     selected_road = None
     selected_start_ids = []
     selected_end_ids = []
@@ -279,9 +284,9 @@ def main():
     road_labels = []
 
     for road in roads:
-        road_labels.append((gohu_font.render(str(road.insertion_order), True, (255, 255, 255)),
+        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                             point_on_road(road, 0.5),
-                            road.insertion_order))
+                            road.global_id))
 
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
@@ -311,9 +316,9 @@ def main():
                     road_labels = []
 
                     for road in roads:
-                        road_labels.append((gohu_font.render(str(road.insertion_order), True, (255, 255, 255)),
+                        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                                             point_on_road(road, 0.5),
-                                            road.insertion_order))
+                                            road.global_id))
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
                     DEBUG_INFO = not DEBUG_INFO
