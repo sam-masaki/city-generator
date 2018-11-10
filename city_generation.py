@@ -9,13 +9,14 @@ from enum import Enum
 DEBUG_INFO = True
 DEBUG_SNAP_TYPE = False
 DEBUG_ROAD_ORDER = False
+DEBUG_HEATMAP = False
 
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
-NOISE_SEED = 0
+NOISE_SEED = (0, 0)
 SCREEN_RES = (1920, 1080)
 
-MAX_SEGS = 1000
+MAX_SEGS = 500
 
 seed = time.process_time()
 random.seed(seed)
@@ -115,28 +116,45 @@ class RoadSegment:
     def connect_links(self):
         unsettled_roads_s = []
         unsettled_roads_e = []
+
+        search_links_s = set()
+        search_links_e = set()
+
         for road in self.links_s:
             if not road.settled:
                 unsettled_roads_s.append(road)
                 continue
 
             if self.start == road.end:
+                search_links_s = road.links_e
                 road.links_e.add(self)
             elif self.start == road.start:
+                search_links_s = road.links_s
                 road.links_s.add(self)
             else:
-                print("Phantom Link from " + str(self.insertion_order) + " to: " + str(road.insertion_order))
+                print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
+
+        for road in search_links_s:
+            if road is not self:
+                self.links_s.add(road)
+
         for road in self.links_e:
             if not road.settled:
                 unsettled_roads_e.append(road)
                 continue
 
             if self.end == road.end:
+                search_links_e = road.links_e
                 road.links_e.add(self)
             elif self.end == road.start:
+                search_links_e = road.links_s
                 road.links_s.add(self)
             else:
-                print("Phantom Link from " + str(self.insertion_order) + " to: " + str(road.insertion_order))
+                print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
+
+        for road in search_links_e:
+            if road is not self:
+                self.links_e.add(road)
 
         for road in unsettled_roads_e:
             self.links_e.remove(road)
@@ -224,8 +242,8 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
                             y * square_size)
 
             intensity = population_point(world_point)
-            color = (0, max(min(intensity * 200, 255), 0), 0)
-
+            color = (0, max(min(intensity * 100, 255), 0), 0)
+            
             pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
             dim = (square_size, square_size)
 
@@ -328,6 +346,9 @@ def main():
                 elif event.key == pygame.K_3:
                     global DEBUG_ROAD_ORDER
                     DEBUG_ROAD_ORDER = not DEBUG_ROAD_ORDER
+                elif event.key == pygame.K_4:
+                    global DEBUG_HEATMAP
+                    DEBUG_HEATMAP = not DEBUG_HEATMAP
 
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
@@ -345,9 +366,9 @@ def main():
                         selected_start_ids = []
                         selected_end_ids = []
                         for road in selected_road.links_s:
-                            selected_start_ids.append(road.insertion_order)
+                            selected_start_ids.append(road.global_id)
                         for road in selected_road.links_e:
-                            selected_end_ids.append(road.insertion_order)
+                            selected_end_ids.append(road.global_id)
                     else:
                         selected_road = None
                 drag_start = None
@@ -357,19 +378,20 @@ def main():
                 prev_mouse = pygame.mouse.get_pos()
         prev_pressed = pygame.mouse.get_pressed()
 
-        #draw_heatmap(screen, 100, viewport_pos, zoom_level)
+        if DEBUG_HEATMAP:
+            draw_heatmap(screen, 50, viewport_pos, zoom_level)
 
         for road in roads:
             draw_road(screen, road, selected_road, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
-            label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)), True, (255, 255, 255))
+            label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)) + " Pop at: " + str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))), True, (255, 255, 255))
             label_pan = gohu_font.render("Pan: " + str(viewport_pos[0]) + ", " + str(viewport_pos[1]), True, (255, 255, 255))
             label_zoom = gohu_font.render("Zoom: " + str(zoom_level) + "x", True, (255, 255, 255))
 
             label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
             if selected_road is not None:
-                label_selected = gohu_font.render("Selected: " + str(selected_road.insertion_order) + " links_s: " + str(selected_start_ids) + " links_e: " + str(selected_end_ids) +
+                label_selected = gohu_font.render("Selected: " + str(selected_road.global_id) + " links_s: " + str(selected_start_ids) + " links_e: " + str(selected_end_ids) +
                                                   " dir: " + str(selected_road.dir()), True, (255, 255, 255))
 
             label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
@@ -455,8 +477,8 @@ def population_level(seg):
 
 
 def population_point(point):
-    x = point[0] + NOISE_SEED
-    y = point[1] + NOISE_SEED
+    x = point[0] + NOISE_SEED[0]
+    y = point[1] + NOISE_SEED[1]
 
     value1 = (snoise2(x/10000, y/10000) + 1) / 2
     value2 = (snoise2((x/20000) + 500, (y/20000) + 500) + 1) / 2
@@ -560,6 +582,8 @@ def local_constraints(inspect_seg, segments):
     action = None
     last_inter_t = 1
     last_ext_t = 999
+
+
 
     for line in segments:
         inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
