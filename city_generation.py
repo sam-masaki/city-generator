@@ -13,7 +13,7 @@ DEBUG_ROAD_ORDER = False
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
 NOISE_SEED = 0
-SCREEN_RES = (1366, 768)
+SCREEN_RES = (1920, 1080)
 
 MAX_SEGS = 1000
 
@@ -27,6 +27,7 @@ class SnapType(Enum):
     End = 2
     Extend = 3
     CrossTooClose = 4
+    DebugDeleted = 5
 
 
 def road_from_dir(start, direction, length, is_highway, time_delay):
@@ -79,7 +80,10 @@ class RoadSegment:
         return dist_points(self.start, self.end)
 
     def dir(self):
-        return math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
+        angle = math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
+        if angle < 0:
+            angle += 360
+        return angle
 
     def as_rect(self):
         angle = self.dir()
@@ -182,6 +186,8 @@ def draw_road(screen, road, selected_road, pan, zoom):
             color = (100, 255, 255)
     if road is selected_road:
         width = 8
+    if road.has_snapped == SnapType.DebugDeleted:
+        color = (0, 255, 0)
 
     #print(road.is_highway)
 
@@ -253,7 +259,7 @@ def main():
 
     running = True
 
-    roads = generate()
+    roads = generate(0.570463956)
     selected_road = None
     selected_start_ids = []
     selected_end_ids = []
@@ -301,6 +307,13 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     roads = generate()
+
+                    road_labels = []
+
+                    for road in roads:
+                        road_labels.append((gohu_font.render(str(road.insertion_order), True, (255, 255, 255)),
+                                            point_on_road(road, 0.5),
+                                            road.insertion_order))
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
                     DEBUG_INFO = not DEBUG_INFO
@@ -351,7 +364,8 @@ def main():
 
             label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
             if selected_road is not None:
-                label_selected = gohu_font.render("Selected: " + str(selected_road.insertion_order) + " links_s: " + str(selected_start_ids) + " links_end: " + str(selected_end_ids), True, (255, 255, 255))
+                label_selected = gohu_font.render("Selected: " + str(selected_road.insertion_order) + " links_s: " + str(selected_start_ids) + " links_e: " + str(selected_end_ids) +
+                                                  " dir: " + str(selected_road.dir()), True, (255, 255, 255))
 
             label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
 
@@ -413,6 +427,16 @@ def point_on_road(road, factor):
 
 
 all_intersections = []
+
+
+def angle_between(a1, a2):
+    while a1 < 0:
+        a1 += 360
+    while a2 < 0:
+        a2 += 360
+
+    reg = math.fabs(a1 - a2)
+    return min(reg, math.fabs(reg - 360))
 
 
 def segment_length(point1, point2):
@@ -559,7 +583,7 @@ def local_constraints(inspect_seg, segments):
 
 
 def snap_to_cross(mod_road, other_road, crossing):
-    aa = math.fabs(other_road.dir() - mod_road.dir()) % 180
+    aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < 30:
         return False
@@ -582,9 +606,40 @@ def snap_to_cross(mod_road, other_road, crossing):
 
 def snap_to_vert(mod_road, other_road, end, too_close):
     if end:
-        mod_road.end = (other_road.end[0], other_road.end[1])
+        linking_point = other_road.end
+        examine_links = other_road.links_e
+        other_angle = other_road.dir()
     else:
-        mod_road.end = (other_road.start[0], other_road.start[1])
+        linking_point = other_road.start
+        examine_links = other_road.links_s
+        other_angle = other_road.dir() - 180
+        if other_angle < 0:
+            other_angle += 360
+
+    if angle_between(mod_road.dir(), other_angle) < 30:
+        return False
+
+    for road in examine_links:
+        if road.end == linking_point:
+            angle = road.dir()
+        elif road.start == linking_point:
+            angle = road.dir() - 180
+            if angle < 0:
+                angle += 360
+
+        if angle_between(mod_road.dir(), angle) < 30:
+            return False
+
+    mod_road.end = linking_point
+
+    if end:
+        for road in other_road.links_e:
+            mod_road.links_e.add(road)
+    else:
+        for road in other_road.links_s:
+            mod_road.links_e.add(road)
+
+    mod_road.links_e.add(other_road)
 
     # when I add links, check that this doesn't create a really acute intersection
 
