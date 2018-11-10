@@ -45,8 +45,8 @@ class RoadSegment:
         self.has_snapped = SnapType.No
         self.is_branch = False
 
-        self.links_s = []
-        self.links_e = []
+        self.links_s = set()
+        self.links_e = set()
         self.settled = False
 
         self.insertion_order = 0
@@ -103,28 +103,36 @@ class RoadSegment:
         return True
 
     def connect_links(self):
+        unsettled_roads_s = []
+        unsettled_roads_e = []
         for road in self.links_s:
             if not road.settled:
-                self.links_s.remove(road)
+                unsettled_roads_s.append(road)
                 continue
 
-            if self.start == road.end and self not in road.links_e:
-                road.links_e.append(self)
-            elif self.start == road.start and self not in road.links_s:
-                road.links_s.append(self)
+            if self.start == road.end:
+                road.links_e.add(self)
+            elif self.start == road.start:
+                road.links_s.add(self)
             else:
                 print("This shouldn't happen but it might rn")
         for road in self.links_e:
             if not road.settled:
-                self.links_e.remove(road)
+                unsettled_roads_e.append(road)
                 continue
 
-            if self.end == road.end and self not in road.links_e:
-                road.links_e.append(self)
-            elif self.end == road.start and self not in road.links_s:
-                road.links_s.append(self)
+            if self.end == road.end:
+                road.links_e.add(self)
+            elif self.end == road.start:
+                road.links_s.add(self)
             else:
                 print("This shouldn't happen but it might rn")
+
+        for road in unsettled_roads_e:
+            self.links_e.remove(road)
+        for road in unsettled_roads_s:
+            self.links_s.remove(road)
+
         self.settled = True
 
 
@@ -242,7 +250,7 @@ def main():
 
     running = True
 
-    roads = generate(0.570463956)
+    roads = generate()
     selected_road = None
     selected_start_ids = []
     selected_end_ids = []
@@ -505,10 +513,10 @@ def global_goals(previous_segment: RoadSegment):
             new_segments.append(branch)
 
     for seg in new_segments:
-        seg.links_s.append(previous_segment)
+        seg.links_s.add(previous_segment)
         for others in new_segments:
             if others is not seg:
-                seg.links_s.append(others)
+                seg.links_s.add(others)
 
     return new_segments
 
