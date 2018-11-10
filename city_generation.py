@@ -1,5 +1,3 @@
-from typing import Any, Tuple
-
 import pygame
 import heapq
 import math
@@ -15,7 +13,9 @@ DEBUG_ROAD_ORDER = False
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
 NOISE_SEED = 0
-SCREEN_RES = (1280, 720)
+SCREEN_RES = (1366, 768)
+
+MAX_SEGS = 1000
 
 seed = time.process_time()
 random.seed(seed)
@@ -26,6 +26,7 @@ class SnapType(Enum):
     Cross = 1
     End = 2
     Extend = 3
+    CrossTooClose = 4
 
 
 def road_from_dir(start, direction, length, is_highway, time_delay):
@@ -115,7 +116,7 @@ class RoadSegment:
             elif self.start == road.start:
                 road.links_s.add(self)
             else:
-                print("This shouldn't happen but it might rn")
+                print("Phantom Link from " + str(self.insertion_order) + " to: " + str(road.insertion_order))
         for road in self.links_e:
             if not road.settled:
                 unsettled_roads_e.append(road)
@@ -126,7 +127,7 @@ class RoadSegment:
             elif self.end == road.start:
                 road.links_s.add(self)
             else:
-                print("This shouldn't happen but it might rn")
+                print("Phantom Link from " + str(self.insertion_order) + " to: " + str(road.insertion_order))
 
         for road in unsettled_roads_e:
             self.links_e.remove(road)
@@ -177,6 +178,8 @@ def draw_road(screen, road, selected_road, pan, zoom):
             color = (100, 255, 100)
         elif road.has_snapped == SnapType.Extend:
             color = (100, 100, 255)
+        elif road.has_snapped == SnapType.CrossTooClose:
+            color = (100, 255, 255)
     if road is selected_road:
         width = 8
 
@@ -348,7 +351,7 @@ def main():
 
             label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
             if selected_road is not None:
-                label_selected = gohu_font.render("Selected: links_s: " + str(selected_start_ids) + " links_end: " + str(selected_end_ids), True, (255, 255, 255))
+                label_selected = gohu_font.render("Selected: " + str(selected_road.insertion_order) + " links_s: " + str(selected_start_ids) + " links_end: " + str(selected_end_ids), True, (255, 255, 255))
 
             label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
 
@@ -399,7 +402,7 @@ def find_intersect(p, pe, q, qe):
     t = tNumerator / denominator
 
     if 0 < u < 1:
-        return (p[0] + (t * r[0]), p[1] + (t * r[1])), t
+        return (p[0] + (t * r[0]), p[1] + (t * r[1])), t, u
 
     return None
 
@@ -457,7 +460,7 @@ def generate(manual_seed=None):
     segments = []
 
     loop_count = 0
-    while not road_queue.is_empty() and len(segments) <= 500:
+    while not road_queue.is_empty() and len(segments) <= MAX_SEGS:
         seg = road_queue.pop()
 
         if local_constraints(seg, segments):
@@ -535,13 +538,13 @@ def local_constraints(inspect_seg, segments):
             last_inter_t = inter[1]
             priority = 4
 
-            action = lambda _, line=line, inter=inter[0]: snap_to_cross(inspect_seg, line, inter)
+            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, line, inter)
             # ????consider finding nearby roads and delete if too similar
 
         if segment_length(line.end, inspect_seg.end) < 50 and priority <= 3:
             priority = 3
 
-            action = lambda _, line=line: snap_to_end(inspect_seg, line)
+            action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
 
         if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
             if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < 50:
@@ -560,20 +563,35 @@ def snap_to_cross(mod_road, other_road, crossing):
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < 30:
         return False
-    # if the lines are not too similar, then cut the inspecting segment down to the intersection
-    all_intersections.append(crossing)
 
-    mod_road.end = crossing
-    mod_road.has_snapped = SnapType.Cross
+    # @FIX Crossings that are really close to existing intersections shouldn't happen; in that case, snap_to_end should
+    # take precedence unless doing so causes a new intersection, then it should go back to intersecting. The main issue
+    # is how to do that without wasting a ton of calculations, since this seems to happen a fair amount (at least the
+    # crossing is too close part). Dividing the full list of segments into sectors could make that recalculation be ok
+    if crossing[2] < 0.05:
+        snap_to_vert(mod_road, other_road, False, True)
+    elif crossing[2] > 0.95:
+        snap_to_vert(mod_road, other_road, True, True)
+    else:
+        all_intersections.append(crossing[0])
+
+        mod_road.end = crossing[0]
+        mod_road.has_snapped = SnapType.Cross
     return True
 
 
-def snap_to_end(mod_road, other_road):
-    mod_road.end = (other_road.end[0], other_road.end[1])
+def snap_to_vert(mod_road, other_road, end, too_close):
+    if end:
+        mod_road.end = (other_road.end[0], other_road.end[1])
+    else:
+        mod_road.end = (other_road.start[0], other_road.start[1])
 
     # when I add links, check that this doesn't create a really acute intersection
 
-    mod_road.has_snapped = SnapType.End
+    if too_close:
+        mod_road.has_snapped = SnapType.CrossTooClose
+    else:
+        mod_road.has_snapped = SnapType.End
     return True
 
 
