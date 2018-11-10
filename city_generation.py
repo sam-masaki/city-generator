@@ -11,12 +11,14 @@ DEBUG_SNAP_TYPE = False
 DEBUG_ROAD_ORDER = False
 DEBUG_HEATMAP = False
 
+DEBUG_NEW_FEATURE = False
+
 HIGHWAY_LENGTH = 400
 STREET_LENGTH = 300
 NOISE_SEED = (0, 0)
 SCREEN_RES = (1920, 1080)
 
-MAX_SEGS = 500
+MAX_SEGS = 1000
 
 seed = time.process_time()
 random.seed(seed)
@@ -243,7 +245,7 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
 
             intensity = population_point(world_point)
             color = (0, max(min(intensity * 100, 255), 0), 0)
-            
+
             pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
             dim = (square_size, square_size)
 
@@ -349,6 +351,16 @@ def main():
                 elif event.key == pygame.K_4:
                     global DEBUG_HEATMAP
                     DEBUG_HEATMAP = not DEBUG_HEATMAP
+                elif event.key == pygame.K_r:
+                    global DEBUG_NEW_FEATURE
+                    DEBUG_NEW_FEATURE = not DEBUG_NEW_FEATURE
+                    roads = generate()
+                    road_labels = []
+
+                    for road in roads:
+                        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
+                                            point_on_road(road, 0.5),
+                                            road.global_id))
 
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
@@ -495,6 +507,7 @@ def wiggle_branch():
 
 
 def generate(manual_seed=None):
+    RoadSegment.seg_id = 0
     global seed
     if manual_seed is None:
         seed = time.process_time()
@@ -605,6 +618,24 @@ def local_constraints(inspect_seg, segments):
                 point = inter[0]
                 action = lambda _, point=point: snap_to_extend(inspect_seg, point)
                 priority = 2
+
+    for link in inspect_seg.links_s:
+        if link.start == inspect_seg.start:
+            ooo = link.links_s
+        else:
+            ooo = link.links_e
+        for road in ooo:
+            if road is not inspect_seg:
+                if road.start == inspect_seg.start:
+                    angle = road.dir()
+                elif road.end == inspect_seg.start:
+                    angle = road.dir() - 180
+                    if angle < 0:
+                        angle += 360
+
+                if angle_between(inspect_seg.dir(), angle) < 30:
+                    return False
+        break
 
     if action is not None:
         return action(None)
