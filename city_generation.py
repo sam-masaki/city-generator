@@ -26,7 +26,9 @@ class SnapType(Enum):
     End = 2
     Extend = 3
     CrossTooClose = 4
-    DebugDeleted = 5
+    Split = 5
+    DebugDeleted = 6
+    Shorten = 7
 
 
 def road_from_dir(start, direction, length, is_highway, time_delay):
@@ -130,6 +132,7 @@ class RoadSegment:
                 search_links_s = road.links_s
                 road.links_s.add(self)
             else:
+                unsettled_roads_s.append(road)
                 print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
 
         for road in search_links_s:
@@ -148,6 +151,7 @@ class RoadSegment:
                 search_links_e = road.links_s
                 road.links_s.add(self)
             else:
+                unsettled_roads_e.append(road)
                 print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
 
         for road in search_links_e:
@@ -618,7 +622,7 @@ def local_constraints(inspect_seg, segments):
             last_inter_t = inter[1]
             priority = 4
 
-            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, line, inter)
+            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter)
             # ????consider finding nearby roads and delete if too similar
 
         if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
@@ -647,6 +651,9 @@ def local_constraints(inspect_seg, segments):
                     angle = road.dir() - 180
                     if angle < 0:
                         angle += 360
+                else:
+                    a = 1
+                    #continue
 
                 if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
                     #inspect_seg.has_snapped = SnapType.DebugDeleted
@@ -658,7 +665,7 @@ def local_constraints(inspect_seg, segments):
     return True
 
 
-def snap_to_cross(mod_road, other_road, crossing):
+def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing):
     aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < MIN_ANGLE_DIFF:
@@ -674,6 +681,31 @@ def snap_to_cross(mod_road, other_road, crossing):
         return snap_to_vert(mod_road, other_road, True, True)
     else:
         all_intersections.append(crossing[0])
+
+        end_links = other_road.links_e
+        split_end = other_road.end
+
+        other_road.links_e = set()
+        other_road.end = crossing[0]
+
+        split_half = RoadSegment(crossing[0], split_end, other_road.is_highway)
+
+        for road in end_links:
+            if other_road in road.links_e:
+                road.links_e.remove(other_road)
+            else:
+                road.links_s.remove(other_road)
+
+        split_half.links_s.add(other_road)
+        split_half.links_e = end_links
+        split_half.connect_links()
+        all_segments.append(split_half)
+
+        other_road.has_snapped = SnapType.Shorten
+        split_half.has_snapped = SnapType.Split
+
+        mod_road.links_e.add(other_road)
+        mod_road.links_e.add(split_half)
 
         mod_road.end = crossing[0]
         mod_road.has_snapped = SnapType.Cross
