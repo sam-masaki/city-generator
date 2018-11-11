@@ -619,7 +619,7 @@ def local_constraints(inspect_seg, segments):
             last_inter_t = inter[1]
             priority = 4
 
-            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter)
+            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter, False)
             # ????consider finding nearby roads and delete if too similar
 
         if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
@@ -631,7 +631,8 @@ def local_constraints(inspect_seg, segments):
             if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
                 last_ext_t = inter[1]
                 point = inter[0]
-                action = lambda _, point=point: snap_to_extend(inspect_seg, point)
+
+                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter, True)
                 priority = 2
 
     if action is not None:
@@ -639,7 +640,7 @@ def local_constraints(inspect_seg, segments):
     return True
 
 
-def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing):
+def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing, is_extend):
     aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < MIN_ANGLE_DIFF:
@@ -684,7 +685,11 @@ def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing):
         mod_road.links_e.add(other_road)
         mod_road.links_e.add(split_half)
         mod_road.end = crossing[0]
-        mod_road.has_snapped = SnapType.Cross
+
+        if is_extend:
+            mod_road.has_snapped = SnapType.Extend
+        else:
+            mod_road.has_snapped = SnapType.Cross
     return True
 
 
@@ -723,15 +728,6 @@ def snap_to_vert(mod_road, other_road, end, too_close):
         mod_road.has_snapped = SnapType.CrossTooClose
     else:
         mod_road.has_snapped = SnapType.End
-    return True
-
-
-def snap_to_extend(mod_road, point):
-    mod_road.end = (point[0], point[1])
-
-    #do link code here
-
-    mod_road.has_snapped = SnapType.Extend
     return True
 
 
