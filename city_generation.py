@@ -50,6 +50,7 @@ class RoadSegment:
         self.has_snapped = SnapType.No
         self.is_branch = False
 
+        self.parent = None
         self.links_s = set()
         self.links_e = set()
         self.settled = False
@@ -113,55 +114,33 @@ class RoadSegment:
         # separating into sectors will work better
         return True
 
+    # Assumes that self has a parent, and assumes
     def connect_links(self):
-        unsettled_roads_s = []
-        unsettled_roads_e = []
+        if self.parent is not None:
+            for road in self.parent.links_e:
+                if self.start == road.end:
+                    road.links_e.add(self)
+                elif self.start == road.start:
+                    road.links_s.add(self)
+                else:
+                    print("AAAAAAAAAAAAAAA")
 
-        search_links_s = set()
-        search_links_e = set()
-
-        for road in self.links_s:
-            if not road.settled:
-                unsettled_roads_s.append(road)
-                continue
-
-            if self.start == road.end:
-                search_links_s = road.links_e
-                road.links_e.add(self)
-            elif self.start == road.start:
-                search_links_s = road.links_s
-                road.links_s.add(self)
-            else:
-                unsettled_roads_s.append(road)
-                print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
-
-        for road in search_links_s:
-            if road is not self:
                 self.links_s.add(road)
+            self.parent.links_e.add(self)
+            self.links_s.add(self.parent)
+
 
         for road in self.links_e:
             if not road.settled:
-                unsettled_roads_e.append(road)
+                print("Should this happen?")
                 continue
 
-            if self.end == road.end:
-                search_links_e = road.links_e
-                road.links_e.add(self)
-            elif self.end == road.start:
-                search_links_e = road.links_s
+            if self.end == road.start:
                 road.links_s.add(self)
+            elif self.end == road.end:
+                road.links_e.add(self)
             else:
-                unsettled_roads_e.append(road)
-                print("Phantom Link from " + str(self.global_id) + " to: " + str(road.global_id))
-
-        for road in search_links_e:
-            if road is not self:
-                self.links_e.add(road)
-
-        for road in unsettled_roads_e:
-            self.links_e.remove(road)
-        for road in unsettled_roads_s:
-            self.links_s.remove(road)
+                print("OSEANOEMANOMEANOMANOEAMSOENAOMSAOENA")
 
         self.settled = True
 
@@ -407,8 +386,11 @@ def main():
             label_zoom = gohu_font.render("Zoom: {}x".format(str(zoom_level)), True, (255, 255, 255))
 
             label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
+            label_parent = gohu_font.render("", True, (255, 255, 255))
             if selected_road is not None:
-                label_selected = gohu_font.render("Selected: {} links_s: {} links_e: {} dir: {}".format(str(selected_road.global_id), str(selected_start_ids), str(selected_end_ids), str(selected_road.dir())), True, (255, 255, 255))
+                label_selected = gohu_font.render("Selected: {} links_s: {} links_e: {} dir: {} has_snapped: {}".format(str(selected_road.global_id), str(selected_start_ids), str(selected_end_ids), str(selected_road.dir()), str(selected_road.has_snapped)), True, (255, 255, 255))
+                if selected_road.parent is not None:
+                    label_parent = gohu_font.render("Parent: {}".format(str(selected_road.parent.global_id)), True, (255, 255, 255))
 
             label_seed = gohu_font.render("Seed: {}".format(str(seed)), True, (255, 255, 255))
 
@@ -418,7 +400,8 @@ def main():
             screen.blit(label_pan, (10, 25))
             screen.blit(label_zoom, (10, 40))
             screen.blit(label_selected, (10, 55))
-            screen.blit(label_seed, (10, 70))
+            screen.blit(label_parent, (10, 70))
+            screen.blit(label_seed, (10, 85))
 
             screen.blit(label_segs, (SCREEN_RES[0] - label_segs.get_width() - 10, 10))
 
@@ -602,10 +585,7 @@ def global_goals(previous_segment: RoadSegment):
             new_segments.append(branch)
 
     for seg in new_segments:
-        seg.links_s.add(previous_segment)
-        for others in new_segments:
-            if others is not seg:
-                seg.links_s.add(others)
+        seg.parent = previous_segment
 
     return new_segments
 
@@ -615,6 +595,23 @@ def local_constraints(inspect_seg, segments):
     action = None
     last_inter_t = 1
     last_ext_t = 999
+
+    # This part doesn't have false positives, but it does miss some lines it should catch
+    if inspect_seg.parent is not None:
+        for road in inspect_seg.parent.links_e:
+            if road is not inspect_seg:
+                if road.start == inspect_seg.start:
+                    angle = road.dir()
+                elif road.end == inspect_seg.start:
+                    angle = road.dir() - 180
+                    if angle < 0:
+                        angle += 360
+                else: # I think this is ok in this case, because inspect_seg hasn't been settled yet, so you don't know if its links are actually solid
+                    continue
+
+                if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
+                    #inspect_seg.has_snapped = SnapType.DebugDeleted
+                    return False
 
     for line in segments:
         inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
@@ -636,28 +633,6 @@ def local_constraints(inspect_seg, segments):
                 point = inter[0]
                 action = lambda _, point=point: snap_to_extend(inspect_seg, point)
                 priority = 2
-
-    # This part doesn't have false positives, but it does miss some lines it should catch
-    for link in inspect_seg.links_s:
-        if link.start == inspect_seg.start:
-            ooo = link.links_s
-        else:
-            ooo = link.links_e
-        for road in ooo:
-            if road is not inspect_seg:
-                if road.start == inspect_seg.start:
-                    angle = road.dir()
-                elif road.end == inspect_seg.start:
-                    angle = road.dir() - 180
-                    if angle < 0:
-                        angle += 360
-                else:
-                    continue
-
-                if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
-                    #inspect_seg.has_snapped = SnapType.DebugDeleted
-                    return False
-        break
 
     if action is not None:
         return action(None)
@@ -681,31 +656,33 @@ def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing):
     else:
         all_intersections.append(crossing[0])
 
-        end_links = other_road.links_e
-        split_end = other_road.end
+        start_links = other_road.links_s
+        start_loc = other_road.start
+        old_parent = other_road.parent
 
-        other_road.links_e = set()
-        other_road.end = crossing[0]
+        other_road.links_s = set()
+        other_road.start = crossing[0]
 
-        split_half = RoadSegment(crossing[0], split_end, other_road.is_highway)
+        if old_parent is not None:
+            old_parent.links_e.remove(other_road)
+            for road in old_parent.links_e:
+                if road.start == old_parent.end:
+                    road.links_s.remove(other_road)
+                elif road.end == old_parent.end:
+                    road.links_e.remove(other_road)
 
-        for road in end_links:
-            if other_road in road.links_e:
-                road.links_e.remove(other_road)
-            else:
-                road.links_s.remove(other_road)
-
-        split_half.links_s.add(other_road)
-        split_half.links_e = end_links
+        split_half = RoadSegment(start_loc, crossing[0], other_road.is_highway)
+        split_half.parent = old_parent
+        split_half.links_e.add(other_road)
         split_half.connect_links()
-        all_segments.append(split_half)
 
-        other_road.has_snapped = SnapType.Shorten
-        split_half.has_snapped = SnapType.Split
+        other_road.parent = split_half
+        other_road.links_s.add(split_half)
+
+        all_segments.append(split_half)
 
         mod_road.links_e.add(other_road)
         mod_road.links_e.add(split_half)
-
         mod_road.end = crossing[0]
         mod_road.has_snapped = SnapType.Cross
     return True
@@ -739,16 +716,8 @@ def snap_to_vert(mod_road, other_road, end, too_close):
 
     mod_road.end = linking_point
 
-    if end:
-        for road in other_road.links_e:
-            mod_road.links_e.add(road)
-    else:
-        for road in other_road.links_s:
-            mod_road.links_e.add(road)
-
+    mod_road.links_e.update(examine_links)
     mod_road.links_e.add(other_road)
-
-    # when I add links, check that this doesn't create a really acute intersection
 
     if too_close:
         mod_road.has_snapped = SnapType.CrossTooClose
@@ -759,6 +728,8 @@ def snap_to_vert(mod_road, other_road, end, too_close):
 
 def snap_to_extend(mod_road, point):
     mod_road.end = (point[0], point[1])
+
+    #do link code here
 
     mod_road.has_snapped = SnapType.Extend
     return True
