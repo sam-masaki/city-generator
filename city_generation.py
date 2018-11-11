@@ -652,8 +652,7 @@ def local_constraints(inspect_seg, segments):
                     if angle < 0:
                         angle += 360
                 else:
-                    a = 1
-                    #continue
+                    continue
 
                 if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
                     #inspect_seg.has_snapped = SnapType.DebugDeleted
