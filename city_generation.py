@@ -189,7 +189,7 @@ def screen_to_world(screen_pos, pan, zoom):
     return result
 
 
-def draw_road(screen, road, selected_road, pan, zoom):
+def draw_road(screen, road, selected_road, selected_connections, pan, zoom):
     width = 2
     color = (255, 255, 255)
 
@@ -207,6 +207,10 @@ def draw_road(screen, road, selected_road, pan, zoom):
             color = (100, 255, 255)
     if road is selected_road:
         width = 8
+        color = (255, 255, 0)
+    elif road in selected_connections:
+        width = 7
+        color = (100, 255, 0)
     if road.has_snapped == SnapType.DebugDeleted:
         color = (0, 255, 0)
 
@@ -284,6 +288,7 @@ def main():
     selected_road = None
     selected_start_ids = []
     selected_end_ids = []
+    selected_connections = []
 
     zoom_level = 1
     zoom_increment = 0
@@ -301,8 +306,7 @@ def main():
 
     for road in roads:
         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                            point_on_road(road, 0.5),
-                            road.global_id))
+                            point_on_road(road, 0.5)))
 
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
@@ -333,8 +337,7 @@ def main():
 
                     for road in roads:
                         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                                            point_on_road(road, 0.5),
-                                            road.global_id))
+                                            point_on_road(road, 0.5)))
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
                     DEBUG_INFO = not DEBUG_INFO
@@ -373,12 +376,13 @@ def main():
                         selected_road = closest[0]
                         selected_start_ids = []
                         selected_end_ids = []
-                        for road in selected_road.links_s:
-                            selected_start_ids.append(road.global_id)
-                        for road in selected_road.links_e:
-                            selected_end_ids.append(road.global_id)
+                        selected_connections = []
+                        set_selected(closest[0], selected_end_ids, selected_start_ids, selected_connections)
                     else:
                         selected_road = None
+                        selected_start_ids = []
+                        selected_end_ids = []
+                        selected_connections = []
                 drag_start = None
         else:
             if pygame.mouse.get_pressed()[0]:
@@ -390,25 +394,29 @@ def main():
             draw_heatmap(screen, 50, viewport_pos, zoom_level)
 
         for road in roads:
-            draw_road(screen, road, selected_road, viewport_pos, zoom_level)
+            draw_road(screen, road, selected_road, selected_connections, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
-            label_mouse = gohu_font.render("Pointer (screen): " + str(pygame.mouse.get_pos()) + " (world): " + str(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)) + " Pop at: " + str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))), True, (255, 255, 255))
-            label_pan = gohu_font.render("Pan: " + str(viewport_pos[0]) + ", " + str(viewport_pos[1]), True, (255, 255, 255))
-            label_zoom = gohu_font.render("Zoom: " + str(zoom_level) + "x", True, (255, 255, 255))
+            mouse_pos = pygame.mouse.get_pressed()
+            label_mouse = gohu_font.render("Pointer [screen]: {} [world]: {} Pop at: {}".format(str(mouse_pos), screen_to_world(mouse_pos, viewport_pos, zoom_level), str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)))), True, (255, 255, 255))
+            label_pan = gohu_font.render("Pan: {}".format(viewport_pos), True, (255, 255, 255))
+            label_zoom = gohu_font.render("Zoom: {}x".format(str(zoom_level)), True, (255, 255, 255))
 
             label_selected = gohu_font.render("Selected: None", True, (255, 255, 255))
             if selected_road is not None:
-                label_selected = gohu_font.render("Selected: " + str(selected_road.global_id) + " links_s: " + str(selected_start_ids) + " links_e: " + str(selected_end_ids) +
-                                                  " dir: " + str(selected_road.dir()), True, (255, 255, 255))
+                label_selected = gohu_font.render("Selected: {} links_s: {} links_e: {} dir: {}".format(str(selected_road.global_id), str(selected_start_ids), str(selected_end_ids), str(selected_road.dir())), True, (255, 255, 255))
 
-            label_seed = gohu_font.render("Seed: " + str(seed), True, (255, 255, 255))
+            label_seed = gohu_font.render("Seed: {}".format(str(seed)), True, (255, 255, 255))
+
+            label_segs = gohu_font.render("# of segments: {}".format(str(MAX_SEGS)), True, (255, 255, 255))
 
             screen.blit(label_mouse, (10, 10))
             screen.blit(label_pan, (10, 25))
             screen.blit(label_zoom, (10, 40))
             screen.blit(label_selected, (10, 55))
             screen.blit(label_seed, (10, 70))
+
+            screen.blit(label_segs, (SCREEN_RES[0] - label_segs.get_width() - 10, 10))
 
         if DEBUG_ROAD_ORDER:
             for label in road_labels:
@@ -417,6 +425,15 @@ def main():
                     screen.blit(label[0], label_pos)
 
         pygame.display.flip()
+
+
+def set_selected(new_selection, links_e_names, links_s_name, connected_roads):
+    for road in new_selection.links_s:
+        connected_roads.append(road)
+        links_s_name.append(road.global_id)
+    for road in new_selection.links_e:
+        connected_roads.append(road)
+        links_e_names.append(road.global_id)
 
 
 def add_lines(l1, l2):
