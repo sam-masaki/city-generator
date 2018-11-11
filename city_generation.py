@@ -5,6 +5,7 @@ import random
 import time
 from noise import snoise2
 from enum import Enum
+from config import *
 
 DEBUG_INFO = True
 DEBUG_SNAP_TYPE = False
@@ -14,23 +15,6 @@ DEBUG_HEATMAP = False
 DEBUG_NEW_FEATURE = False
 
 NOISE_SEED = (0, 0)
-
-# Configuration Constants:
-MAX_SEGS = 1000
-SCREEN_RES = (1920, 1080)
-HIGHWAY_LENGTH = 400
-STREET_LENGTH = 300
-
-HIGHWAY_BRANCH_POP = 0.1
-HIGHWAY_BRANCH_CHANCE = 0.1
-STREET_BRANCH_POP = 0.1
-STREET_BRANCH_CHANCE = 0.8
-STREET_EXTEND_POP = 0.1
-
-SNAP_VERTEX_RADIUS = 50
-SNAP_EXTEND_RADIUS = 50
-
-MIN_ANGLE_DIFF = 30
 
 seed = time.process_time()
 random.seed(seed)
@@ -606,8 +590,6 @@ def global_goals(previous_segment: RoadSegment):
 
 
 def local_constraints(inspect_seg, segments):
-    extras = []
-
     priority = 0
     action = None
     last_inter_t = 1
@@ -634,6 +616,7 @@ def local_constraints(inspect_seg, segments):
                 action = lambda _, point=point: snap_to_extend(inspect_seg, point)
                 priority = 2
 
+    # This part doesn't have false positives, but it does miss some lines it should catch
     for link in inspect_seg.links_s:
         if link.start == inspect_seg.start:
             ooo = link.links_s
@@ -649,6 +632,7 @@ def local_constraints(inspect_seg, segments):
                         angle += 360
 
                 if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
+                    #inspect_seg.has_snapped = SnapType.DebugDeleted
                     return False
         break
 
