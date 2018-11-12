@@ -5,11 +5,27 @@ import random
 import time
 from heapdict import heapdict
 from noise import snoise2
-from enum import Enum
+import enum
 from config import *
 
+class DebugRoadViews(enum.Enum):
+    No = enum.auto()
+    Snaps = enum.auto()
+    Branches = enum.auto()
+
+
+class SnapType(enum.Enum):
+    No = 0
+    Cross = 1
+    End = 2
+    Extend = 3
+    CrossTooClose = 4
+    Split = 5
+    DebugDeleted = 6
+    Shorten = 7
+
 DEBUG_INFO = True
-DEBUG_SNAP_TYPE = False
+DEBUG_ROAD_VIEW = DebugRoadViews.No
 DEBUG_ROAD_ORDER = False
 DEBUG_HEATMAP = False
 
@@ -19,17 +35,6 @@ NOISE_SEED = (0, 0)
 
 seed = time.process_time()
 random.seed(seed)
-
-
-class SnapType(Enum):
-    No = 0
-    Cross = 1
-    End = 2
-    Extend = 3
-    CrossTooClose = 4
-    Split = 5
-    DebugDeleted = 6
-    Shorten = 7
 
 
 def road_from_dir(start, direction, length, is_highway, time_delay):
@@ -59,7 +64,8 @@ class RoadSegment:
         self.insertion_order = 0
         self.global_id = RoadSegment.seg_id
 
-        self.pathing_dist = 9999999
+        self.pathing_dist_start = 9999999
+        self.pathing_dist_end = 9999999
         self.pathing_prev = None
 
         RoadSegment.seg_id += 1
@@ -152,6 +158,9 @@ class RoadSegment:
 
         return round(self.length() * multiplier * 0.1)
 
+    def pathing_heuristic(self, goal):
+        return dist_points(point_on_road(self, 0.5), point_on_road(goal, 0.5)) * 0.1
+
 
 class RoadQueue:
 
@@ -180,14 +189,14 @@ def screen_to_world(screen_pos, pan, zoom):
     return result
 
 
-def draw_road(screen, road, selected_road, selected_connections, path, start, end, pan, zoom):
+def draw_road(screen, road, selected_road, selected_connections, path, start, end, searched, pan, zoom):
     width = 2
     color = (255, 255, 255)
 
     if road.is_highway:
         width = 4
         color = (255, 0, 0)
-    elif DEBUG_SNAP_TYPE:
+    elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
         if road.has_snapped == SnapType.Cross:
             color = (255, 100, 100)
         elif road.has_snapped == SnapType.End:
@@ -196,12 +205,19 @@ def draw_road(screen, road, selected_road, selected_connections, path, start, en
             color = (100, 100, 255)
         elif road.has_snapped == SnapType.CrossTooClose:
             color = (100, 255, 255)
+    elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
+        if road.is_branch:
+            color = (100, 255, 100)
+
     if road is selected_road:
         width = 8
         color = (255, 255, 0)
     elif road in path:
         width = 7
         color = (0, 255, 255)
+    elif road in searched:
+        width = 5
+        color = (255, 0, 255)
 
     if road is start:
         width = 8
@@ -279,9 +295,9 @@ def int_pos(float_tuple):
 def path_to_road(start, end, all_roads):
     node_queue = heapdict()
     for road in all_roads:
-        road.pathing_dist = 0 if road is start else 9999999
+        road.pathing_dist_start = 0 if road is start else 9999999
         road.pathing_prev = None
-        node_queue[road] = road.pathing_dist
+        node_queue[road] = road.pathing_dist_start
 
     while not len(node_queue) == 0:
         curr_min = node_queue.popitem()[0]
@@ -292,9 +308,9 @@ def path_to_road(start, end, all_roads):
         neighbors = curr_min.links_s.union(curr_min.links_e)
 
         for road in neighbors:
-            this_dist = curr_min.pathing_dist + road.pathing_cost()
-            if this_dist < road.pathing_dist:
-                road.pathing_dist = this_dist
+            this_dist = curr_min.pathing_dist_start + road.pathing_cost()
+            if this_dist < road.pathing_dist_start:
+                road.pathing_dist_start = this_dist
                 road.pathing_prev = curr_min
                 node_queue[road] = this_dist
 
@@ -305,9 +321,48 @@ def path_to_road(start, end, all_roads):
             sequence.append(curr_node)
             curr_node = curr_node.pathing_prev
 
-    print(len(sequence))
-
     return sequence
+
+
+def path_astar(start, end, all_roads):
+    closed = []
+    open = heapdict()
+
+    for road in all_roads:
+        road.pathing_dist_start = 0 if road is start else 9999999
+        road.pathing_dist_end = road.pathing_heuristic(end) if road is start else 9999999
+        road.pathing_prev = None
+    open[start] = start.pathing_dist_end
+
+    while len(open):
+        curr_min = open.popitem()[0]
+        if curr_min is end:
+            break
+
+        closed.append(curr_min)
+        neighbors = curr_min.links_s.union(curr_min.links_e)
+
+        for road in neighbors:
+            if road in closed:
+                continue
+
+            new_dist_start = curr_min.pathing_dist_start + road.pathing_cost()
+
+            if new_dist_start < road.pathing_dist_start:
+                road.pathing_dist_start = new_dist_start
+                road.pathing_dist_end = road.pathing_dist_start + road.pathing_heuristic(end)
+                road.pathing_prev = curr_min
+                if road not in open:
+                    open[road] = road.pathing_dist_end
+
+    sequence = []
+    if end.pathing_prev is not None or end is start:
+        curr_node = end
+        while curr_node is not None:
+            sequence.append(curr_node)
+            curr_node = curr_node.pathing_prev
+
+    return sequence, closed
 
 
 def main():
@@ -320,6 +375,7 @@ def main():
     roads = generate()
 
     path = []
+    path_searched = []
     path_start = None
     path_end = None
 
@@ -380,8 +436,13 @@ def main():
                     global DEBUG_INFO
                     DEBUG_INFO = not DEBUG_INFO
                 elif event.key == pygame.K_2:
-                    global DEBUG_SNAP_TYPE
-                    DEBUG_SNAP_TYPE = not DEBUG_SNAP_TYPE
+                    global DEBUG_ROAD_VIEW
+                    if DEBUG_ROAD_VIEW == DebugRoadViews.No:
+                        DEBUG_ROAD_VIEW = DebugRoadViews.Snaps
+                    elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
+                        DEBUG_ROAD_VIEW = DebugRoadViews.No
+                    elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
+                        DEBUG_ROAD_VIEW = DebugRoadViews.Branches
                 elif event.key == pygame.K_3:
                     global DEBUG_ROAD_ORDER
                     DEBUG_ROAD_ORDER = not DEBUG_ROAD_ORDER
@@ -416,7 +477,9 @@ def main():
                     if closest[1] < 100:
                         path_end = closest[0]
                 elif event.key == pygame.K_c:
-                    path = path_to_road(path_start, path_end, roads)
+                    path_data = path_astar(path_start, path_end, roads)
+                    path = path_data[0]
+                    path_searched = path_data[1]
 
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
@@ -451,7 +514,7 @@ def main():
             draw_heatmap(screen, 50, viewport_pos, zoom_level)
 
         for road in roads:
-            draw_road(screen, road, selected_road, selected_connections, path, path_start, path_end, viewport_pos, zoom_level)
+            draw_road(screen, road, selected_road, selected_connections, path, path_start, path_end, path_searched, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
             mouse_pos = pygame.mouse.get_pressed()
