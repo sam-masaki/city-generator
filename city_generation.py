@@ -515,46 +515,45 @@ def main():
             draw_road(screen, road, selected_road, selected_connections, path, path_start, path_end, path_searched, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
-            debug_labels = []
+            debug_labels_left = []
+            debug_labels_right = []
 
             mouse_pos = pygame.mouse.get_pos()
 
-            debug_labels.append("Pointer [screen]: {} [world]: {} Pop at: {}".format(str(mouse_pos), screen_to_world(mouse_pos, viewport_pos, zoom_level), str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)))))
+            debug_labels_left.append("Pointer [screen]: {} [world]: {} Pop at: {}".format(str(mouse_pos), screen_to_world(mouse_pos, viewport_pos, zoom_level), str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)))))
 
-            debug_labels.append("Pan: {}".format(viewport_pos))
-            debug_labels.append("Zoom: {}x".format(str(zoom_level)))
+            debug_labels_left.append("Pan: {}".format(viewport_pos))
+            debug_labels_left.append("Zoom: {}x".format(str(zoom_level)))
 
             if selected_road is not None:
-                debug_labels.append("Selected: {}".format(str(selected_road.global_id)))
+                debug_labels_left.append("Selected: {}".format(str(selected_road.global_id)))
                 if selected_road.parent is not None:
-                    debug_labels.append("    Parent: {}".format(str(selected_road.parent.global_id)))
+                    debug_labels_left.append("    Parent: {}".format(str(selected_road.parent.global_id)))
                 else:
-                    debug_labels.append("    Parent: None")
-                debug_labels.append("    dir: {}".format(str(selected_road.dir())))
-                debug_labels.append("    links_s: {}".format(str(selected_start_ids)))
-                debug_labels.append("    links_s: {}".format(str(selected_end_ids)))
-                debug_labels.append("    has_snapped: {}".format(str(selected_road.has_snapped)))
+                    debug_labels_left.append("    Parent: None")
+                debug_labels_left.append("    dir: {}".format(str(selected_road.dir())))
+                debug_labels_left.append("    links_s: {}".format(str(selected_start_ids)))
+                debug_labels_left.append("    links_s: {}".format(str(selected_end_ids)))
+                debug_labels_left.append("    has_snapped: {}".format(str(selected_road.has_snapped)))
             else:
-                debug_labels.append("Selected: None")
-                debug_labels.append("")
-                debug_labels.append("")
-                debug_labels.append("")
-                debug_labels.append("")
-                debug_labels.append("")
+                debug_labels_left.append("Selected: None")
 
-            debug_labels.append("Seed: {}".format(str(seed)))
+            debug_labels_right.append("Seed: {}".format(str(seed)))
 
-            debug_labels.append("# of segments: {}".format(str(MAX_SEGS)))
+            debug_labels_right.append("# of segments: {}".format(str(MAX_SEGS)))
 
             height = 10
-            for label in debug_labels:
+            for label in debug_labels_left:
                 screen.blit(gohu_font.render(label, True, (255, 255, 255)),
                             (10, height))
                 height += 15
 
-            #screen.blit(label_seed, (10, 85))
-
-            #screen.blit(label_segs, (SCREEN_RES[0] - label_segs.get_width() - 10, 10))
+            height = 10
+            for label in debug_labels_right:
+                surf = gohu_font.render(label, True, (255, 255, 255))
+                screen.blit(surf,
+                            (SCREEN_RES[0] - surf.get_width() - 10, height))
+                height += 15
 
         if DEBUG_ROAD_ORDER:
             for label in road_labels:
