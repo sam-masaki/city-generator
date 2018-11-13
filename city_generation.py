@@ -645,7 +645,19 @@ def wiggle_branch():
     return random.randint(-3, 3)
 
 
+time_spent_generate = 0
+time_spent_local = 0
+
+
 def generate(manual_seed=None):
+    global time_spent_generate
+    global time_spent_local
+
+    time_spent_generate = 0
+    time_spent_local = 0
+
+    time_spent = pygame.time.get_ticks()
+
     RoadSegment.seg_id = 0
     global seed
     if manual_seed is None:
@@ -677,6 +689,9 @@ def generate(manual_seed=None):
                 new_seg.t = seg.t + 1 + new_seg.t
                 road_queue.push(new_seg)
         loop_count += 1
+
+    time_spent_generate = pygame.time.get_ticks() - time_spent
+    print("Time spent in local constraints: {}\nTime spent generate: {}".format(time_spent_local, time_spent_generate))
 
     return segments
 
@@ -743,6 +758,8 @@ def local_constraints(inspect_seg, segments):
     last_ext_t = 999
 
     # This part doesn't have false positives, but it does miss some lines it should catch
+    time_start = pygame.time.get_ticks()
+
     if inspect_seg.parent is not None:
         for road in inspect_seg.parent.links_e:
             if road is not inspect_seg:
@@ -780,6 +797,9 @@ def local_constraints(inspect_seg, segments):
 
                 action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter, True)
                 priority = 2
+
+    global time_spent_local
+    time_spent_local += pygame.time.get_ticks() - time_start
 
     if action is not None:
         return action(None)
