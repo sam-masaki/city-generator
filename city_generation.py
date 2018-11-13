@@ -822,7 +822,9 @@ def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing, is_
         split_half.parent = old_parent
         split_half.links_e.add(other_road)
         split_half.connect_links()
+        split_half.is_branch = other_road.is_branch
 
+        other_road.is_branch = False
         other_road.parent = split_half
         other_road.links_s.add(split_half)
 
