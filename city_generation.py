@@ -24,6 +24,7 @@ class SnapType(enum.Enum):
     DebugDeleted = 6
     Shorten = 7
 
+
 DEBUG_INFO = True
 DEBUG_ROAD_VIEW = DebugRoadViews.No
 DEBUG_ROAD_ORDER = False
@@ -79,19 +80,16 @@ class RoadSegment:
     def copy(self):
         return RoadSegment(self.start, self.end, self.is_highway, self.t)
 
-    def make_extension(self, direction):
-        end_x = self.end[0] + (self.length() * math.cos(math.radians(direction)))
-        end_y = self.end[1] + (self.length() * math.sin(math.radians(direction)))
+    def make_continuation(self, length, offset, is_highway, is_branch, delay=0):
+        radian_dir = math.radians(self.dir() + offset)
 
-        ext = RoadSegment(self.end, (end_x, end_y), self.is_highway, 0)
-        return ext
+        end_x = self.end[0] + (length * math.cos(radian_dir))
+        end_y = self.end[1] + (length * math.sin(radian_dir))
 
-    def make_branch(self, direction, delay):
-        end_x = self.end[0] + (STREET_LENGTH * math.cos(math.radians(direction)))
-        end_y = self.end[1] + (STREET_LENGTH * math.sin(math.radians(direction)))
+        road = RoadSegment(self.end, (end_x, end_y), is_highway, delay)
+        road.is_branch = is_branch
 
-        ext = RoadSegment(self.end, (end_x, end_y), False, delay)
-        return ext
+        return road
 
     def length(self):
         return dist_points(self.start, self.end)
@@ -689,11 +687,17 @@ def global_goals(previous_segment: RoadSegment):
     if previous_segment.has_snapped != SnapType.No:
         return new_segments
 
-    straight_seg = previous_segment.make_extension(previous_segment.dir())
+    straight_seg = previous_segment.make_continuation(previous_segment.length(),
+                                                      0,
+                                                      previous_segment.is_highway,
+                                                      False)
     straight_pop = population_level(straight_seg)
 
     if previous_segment.is_highway:
-        wiggle_seg = previous_segment.make_extension(previous_segment.dir() + wiggle_highway())
+        wiggle_seg = previous_segment.make_continuation(HIGHWAY_LENGTH,
+                                                        wiggle_highway(),
+                                                        True,
+                                                        False)
         wiggle_pop = population_level(wiggle_seg)
 
         if wiggle_pop > straight_pop:
@@ -705,8 +709,10 @@ def global_goals(previous_segment: RoadSegment):
 
         if ext_pop > HIGHWAY_BRANCH_POP and random.random() < HIGHWAY_BRANCH_CHANCE:
             sign = random.randrange(-1, 2, 2)
-            branch = previous_segment.make_extension(previous_segment.dir() + (90 * sign) + wiggle_branch())
-            branch.is_branch = True
+            branch = previous_segment.make_continuation(HIGHWAY_LENGTH,
+                                                        (90 * sign) + wiggle_branch(),
+                                                        True,
+                                                        True)
             new_segments.append(branch)
 
     if straight_pop > STREET_EXTEND_POP:
@@ -717,8 +723,11 @@ def global_goals(previous_segment: RoadSegment):
         if random.random() < STREET_BRANCH_CHANCE:
             sign = random.randrange(-1, 2, 2)
             delay = 5 if previous_segment.is_highway else 0
-            branch = previous_segment.make_branch(previous_segment.dir() + (90 * sign) + wiggle_branch(), delay)
-            branch.is_branch = True
+            branch = previous_segment.make_continuation(STREET_LENGTH,
+                                                        (90 * sign) + wiggle_branch(),
+                                                        False,
+                                                        True,
+                                                        delay)
             new_segments.append(branch)
 
     for seg in new_segments:
