@@ -29,6 +29,7 @@ DEBUG_INFO = True
 DEBUG_ROAD_VIEW = DebugRoadViews.No
 DEBUG_ROAD_ORDER = False
 DEBUG_HEATMAP = False
+DEBUG_SECTORS = True
 
 DEBUG_NEW_FEATURE = False
 
@@ -495,12 +496,14 @@ def main():
                         selected_start_ids = []
                         selected_end_ids = []
                         selected_connections = []
-                        set_selected(closest[0], selected_end_ids, selected_start_ids, selected_connections)
+                        selected_sectors = set()
+                        set_selected(closest[0], selected_end_ids, selected_start_ids, selected_connections, selected_sectors)
                     else:
                         selected_road = None
                         selected_start_ids = []
                         selected_end_ids = []
                         selected_connections = []
+                        selected_sectors = set()
                 drag_start = None
         else:
             if pygame.mouse.get_pressed()[0]:
@@ -511,6 +514,24 @@ def main():
         if DEBUG_HEATMAP:
             draw_heatmap(screen, 50, viewport_pos, zoom_level)
 
+        if DEBUG_SECTORS:
+            x_min = round(screen_to_world((0, 0), viewport_pos, zoom_level)[0] // 2000) + 1
+            x_max = round(screen_to_world((SCREEN_RES[0], 0), viewport_pos, zoom_level)[0] // 2000) + 1
+
+            x_range = range(x_min, x_max)
+            for x in x_range:
+                pos_x = world_to_screen((2000 * x, 0), viewport_pos, zoom_level)[0]
+                pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, SCREEN_RES[1]))
+
+            y_min = round(screen_to_world((0, 0), viewport_pos, zoom_level)[1] // 2000) + 1
+            y_max = round(screen_to_world((0, SCREEN_RES[1]), viewport_pos, zoom_level)[1] // 2000) + 1
+
+            y_range = range(y_min, y_max)
+            for y in y_range:
+                pos_y = world_to_screen((0, 2000 * y), viewport_pos, zoom_level)[1]
+                pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (SCREEN_RES[0], pos_y))
+
+
         for road in roads:
             draw_road(screen, road, selected_road, selected_connections, path, path_start, path_end, path_searched, viewport_pos, zoom_level)
 
@@ -520,8 +541,10 @@ def main():
 
             mouse_pos = pygame.mouse.get_pos()
 
-            debug_labels_left.append("Pointer [screen]: {} [world]: {} Pop at: {}".format(str(mouse_pos), screen_to_world(mouse_pos, viewport_pos, zoom_level), str(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level)))))
-
+            debug_labels_left.append("Pointer (screen): {}".format(str(mouse_pos)))
+            debug_labels_left.append("    (world): {}".format(screen_to_world(mouse_pos, viewport_pos, zoom_level)))
+            debug_labels_left.append("    pop_at: {}".format(population_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))))
+            debug_labels_left.append("    sec_at: {}".format(sector_at(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))))
             debug_labels_left.append("Pan: {}".format(viewport_pos))
             debug_labels_left.append("Zoom: {}x".format(str(zoom_level)))
 
@@ -535,6 +558,7 @@ def main():
                 debug_labels_left.append("    links_s: {}".format(str(selected_start_ids)))
                 debug_labels_left.append("    links_s: {}".format(str(selected_end_ids)))
                 debug_labels_left.append("    has_snapped: {}".format(str(selected_road.has_snapped)))
+                debug_labels_left.append("    sectors: {}".format(str(selected_sectors)))
             else:
                 debug_labels_left.append("Selected: None")
 
@@ -544,13 +568,13 @@ def main():
 
             height = 10
             for label in debug_labels_left:
-                screen.blit(gohu_font.render(label, True, (255, 255, 255)),
+                screen.blit(gohu_font.render(label, False, (255, 255, 255), (0, 0, 0)),
                             (10, height))
                 height += 15
 
             height = 10
             for label in debug_labels_right:
-                surf = gohu_font.render(label, True, (255, 255, 255))
+                surf = gohu_font.render(label, False, (255, 255, 255))
                 screen.blit(surf,
                             (SCREEN_RES[0] - surf.get_width() - 10, height))
                 height += 15
@@ -564,13 +588,16 @@ def main():
         pygame.display.flip()
 
 
-def set_selected(new_selection, links_e_names, links_s_name, connected_roads):
+def set_selected(new_selection, links_e_names, links_s_name, connected_roads, sectors):
     for road in new_selection.links_s:
         connected_roads.append(road)
         links_s_name.append(road.global_id)
     for road in new_selection.links_e:
         connected_roads.append(road)
         links_e_names.append(road.global_id)
+    secs = sectors_from_seg(new_selection)
+    for sect in secs:
+        sectors.add(sect)
 
 
 def add_lines(l1, l2):
@@ -688,15 +715,17 @@ def generate(manual_seed=None):
     road_queue.push(RoadSegment((0, 0), (HIGHWAY_LENGTH, 0), True))
 
     segments = []
+    sector_segments = {}
 
     loop_count = 0
     while not road_queue.is_empty() and len(segments) <= MAX_SEGS:
         seg = road_queue.pop()
 
-        if local_constraints(seg, segments):
+        if local_constraints(seg, segments, sector_segments):
             seg.insertion_order = loop_count
             seg.connect_links()
             segments.append(seg)
+            add_to_sector(seg, sector_segments)
 
             new_segments = global_goals(seg)
 
@@ -709,6 +738,62 @@ def generate(manual_seed=None):
     print("Time spent in local constraints: {}\nTime spent generate: {}".format(time_spent_local, time_spent_generate))
 
     return segments
+
+
+def add_to_sector(new_seg, sectors):
+    containing_sectors = sectors_from_seg(new_seg)
+
+    for sector in containing_sectors:
+        if sector not in sectors:
+            sectors[sector] = []
+        sectors[sector].append(new_seg)
+
+
+def sectors_from_seg(segment: RoadSegment):
+    all_sectors = set()
+
+    # this could be made variable depending on whether a road is only in one sector, or overlaps NSEW, or overlaps diag
+    # and also it depends on the maximum possible road length
+    # also this whole thing is in dire need of optimizing, but whatever
+    start_sector = (segment.start[0] // SECTOR_SIZE, segment.start[1] // SECTOR_SIZE)
+    end_sector = (segment.end[0] // SECTOR_SIZE, segment.end[1] // SECTOR_SIZE)
+
+    all_sectors.add(start_sector)
+    all_sectors.add(end_sector)
+    
+    start_secs = sectors_from_point(segment.start)
+    end_secs = sectors_from_point(segment.end)
+    
+    return start_secs.union(end_secs)
+
+
+def sector_at(point):
+    return point[0] // SECTOR_SIZE, point[1] // SECTOR_SIZE
+
+
+def sectors_from_point(point):
+    start_sector = sector_at(point)
+    
+    sectors = {start_sector}
+    
+    if point[0] % SECTOR_SIZE < MIN_DIST_EDGE:
+        sectors.add((start_sector[0] - 1, start_sector[1]))
+        if point[1] % SECTOR_SIZE < MIN_DIST_EDGE:
+            sectors.add((start_sector[0] - 1, start_sector[1] - 1))
+        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+            sectors.add((start_sector[0] - 1, start_sector[1] + 1))
+    elif SECTOR_SIZE - (point[0] % SECTOR_SIZE) < MIN_DIST_EDGE:
+        sectors.add((start_sector[0] + 1, start_sector[1]))
+        if SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+            sectors.add((start_sector[0] + 1, start_sector[1] + 1))
+        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+            sectors.add((start_sector[0] + 1, start_sector[1] - 1))
+    if point[1] % SECTOR_SIZE < MIN_DIST_EDGE:
+        sectors.add((start_sector[0], start_sector[1] - 1))
+    elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+        sectors.add((start_sector[0], start_sector[1] + 1))
+
+    return sectors
 
 
 def global_goals(previous_segment: RoadSegment):
@@ -766,7 +851,7 @@ def global_goals(previous_segment: RoadSegment):
     return new_segments
 
 
-def local_constraints(inspect_seg, segments):
+def local_constraints(inspect_seg, segments, sector_segments):
     priority = 0
     action = None
     last_inter_t = 1
@@ -790,28 +875,31 @@ def local_constraints(inspect_seg, segments):
                 if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
                     #inspect_seg.has_snapped = SnapType.DebugDeleted
                     return False
+    road_sectors = sectors_from_seg(inspect_seg)
+    for sec in road_sectors:
+        if sec not in sector_segments:
+            continue
+        for line in sector_segments[sec]:
+            inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
+            if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
+                last_inter_t = inter[1]
+                priority = 4
 
-    for line in segments:
-        inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
-        if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
-            last_inter_t = inter[1]
-            priority = 4
+                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
+                # ????consider finding nearby roads and delete if too similar
 
-            action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter, False)
-            # ????consider finding nearby roads and delete if too similar
+            if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
+                priority = 3
 
-        if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
-            priority = 3
+                action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
 
-            action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
+            if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
+                if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
+                    last_ext_t = inter[1]
+                    point = inter[0]
 
-        if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
-            if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
-                last_ext_t = inter[1]
-                point = inter[0]
-
-                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, line, inter, True)
-                priority = 2
+                    action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
+                    priority = 2
 
     global time_spent_local
     time_spent_local += pygame.time.get_ticks() - time_start
@@ -821,7 +909,7 @@ def local_constraints(inspect_seg, segments):
     return True
 
 
-def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing, is_extend):
+def snap_to_cross(mod_road, all_segments, sector_segments, other_road: RoadSegment, crossing, is_extend):
     aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < MIN_ANGLE_DIFF:
@@ -864,6 +952,7 @@ def snap_to_cross(mod_road, all_segments, other_road: RoadSegment, crossing, is_
         other_road.links_s.add(split_half)
 
         all_segments.append(split_half)
+        add_to_sector(split_half, sector_segments)
 
         mod_road.links_e.add(other_road)
         mod_road.links_e.add(split_half)
