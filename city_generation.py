@@ -277,20 +277,20 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
 
 
 def draw_sectors(screen: pygame.Surface, pan, zoom):
-    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // 2000) + 1
-    x_max = round(screen_to_world((SCREEN_RES[0], 0), pan, zoom)[0] // 2000) + 1
+    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // SECTOR_SIZE) + 1
+    x_max = round(screen_to_world((SCREEN_RES[0], 0), pan, zoom)[0] // SECTOR_SIZE) + 1
 
     x_range = range(x_min, x_max)
     for x in x_range:
-        pos_x = world_to_screen((2000 * x, 0), pan, zoom)[0]
+        pos_x = world_to_screen((SECTOR_SIZE * x, 0), pan, zoom)[0]
         pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, SCREEN_RES[1]))
 
-    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // 2000) + 1
-    y_max = round(screen_to_world((0, SCREEN_RES[1]), pan, zoom)[1] // 2000) + 1
+    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // SECTOR_SIZE) + 1
+    y_max = round(screen_to_world((0, SCREEN_RES[1]), pan, zoom)[1] // SECTOR_SIZE) + 1
 
     y_range = range(y_min, y_max)
     for y in y_range:
-        pos_y = world_to_screen((0, 2000 * y), pan, zoom)[1]
+        pos_y = world_to_screen((0, SECTOR_SIZE * y), pan, zoom)[1]
         pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (SCREEN_RES[0], pos_y))
 
 
