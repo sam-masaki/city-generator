@@ -8,6 +8,7 @@ from noise import snoise2
 import enum
 from config import *
 
+
 class DebugRoadViews(enum.Enum):
     No = enum.auto()
     Snaps = enum.auto()
@@ -29,7 +30,7 @@ DEBUG_INFO = True
 DEBUG_ROAD_VIEW = DebugRoadViews.No
 DEBUG_ROAD_ORDER = False
 DEBUG_HEATMAP = False
-DEBUG_SECTORS = True
+DEBUG_SECTORS = False
 
 DEBUG_NEW_FEATURE = False
 
@@ -118,12 +119,6 @@ class RoadSegment:
 
         return list
 
-    def collides_width(self, other):
-        # may not be needed since the tmwhere citygen checks for collision to weed out unneccesary checks, but I think
-        # separating into sectors will work better
-        return True
-
-    # Assumes that self has a parent, and assumes
     def connect_links(self):
         if self.parent is not None:
             for road in self.parent.links_e:
@@ -188,74 +183,89 @@ def screen_to_world(screen_pos, pan, zoom):
     return result
 
 
-def draw_road(screen, road, selected_road, selected_connections, path, start, end, searched, pan, zoom):
-    width = 2
-    color = (255, 255, 255)
+def draw_all_roads(roads, screen, pan, zoom):
+    for road in roads:
+        width = 2
+        color = (255, 255, 255)
 
-    if road.is_highway:
-        width = 4
-        color = (255, 0, 0)
-    elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
-        if road.has_snapped == SnapType.Cross:
-            color = (255, 100, 100)
-        elif road.has_snapped == SnapType.End:
-            color = (100, 255, 100)
-        elif road.has_snapped == SnapType.Extend:
-            color = (100, 100, 255)
-        elif road.has_snapped == SnapType.CrossTooClose:
-            color = (100, 255, 255)
-    elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
-        if road.is_branch:
-            color = (100, 255, 100)
+        if road.is_highway:
+            width = 4
+            color = (255, 0, 0)
+        elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
+            if road.has_snapped == SnapType.Cross:
+                color = (255, 100, 100)
+            elif road.has_snapped == SnapType.End:
+                color = (100, 255, 100)
+            elif road.has_snapped == SnapType.Extend:
+                color = (100, 100, 255)
+            elif road.has_snapped == SnapType.CrossTooClose:
+                color = (100, 255, 255)
+        elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
+            if road.is_branch:
+                color = (100, 255, 100)
+        if road.has_snapped == SnapType.DebugDeleted:
+            color = (0, 255, 0)
 
-    if road is selected_road:
-        width = 8
-        color = (255, 255, 0)
-    elif road in path:
-        width = 7
-        color = (0, 255, 255)
-    elif road in searched:
+        draw_road(road, color, width, screen, pan, zoom)
+
+
+def draw_roads_selected(selection, screen, pan, zoom):
+    if selection is not None:
+        draw_road(selection[0], (255, 255, 0), 8, screen, pan, zoom)
+
+        for road in selection[1]:
+            draw_road(road, (0, 255, 0), 6, screen, pan, zoom)
+
+
+def draw_roads_path(path, searched, start, end, screen, pan, zoom):
+    if len(searched) != 0:
         width = 5
         color = (255, 0, 255)
 
-    if road is start:
-        width = 8
-        color = (0, 255, 0)
-    elif road is end:
-        width = 8
-        color = (255, 0, 0)
+        for road in searched:
+            draw_road(road, color, width, screen, pan, zoom)
 
-    if road.has_snapped == SnapType.DebugDeleted:
-        color = (0, 255, 0)
+    if len(path) != 0:
+        width = 7
+        color = (0, 255, 255)
+        for road in path:
+            draw_road(road, color, width, screen, pan, zoom)
 
-    #print(road.is_highway)
+    width = 8
+    if start is not None:
+        draw_road(start, (0, 255, 0), width, screen, pan, zoom)
+    if end is not None:
+        draw_road(end, (255, 0, 0), width, screen, pan, zoom)
 
+
+def draw_road(road, color, width, screen, pan, zoom):
     pygame.draw.line(screen, color, world_to_screen(road.start, pan, zoom),
                      world_to_screen(road.end, pan, zoom), width)
 
 
-def draw_square(screen, point, intensity, size):
-    color = (0, max(min(intensity * 200, 255), 0), 0)
+def select_nearby_road(world_pos, roads):
+    closest = (None, 9999)
+    for road in roads:
+        dist = dist_points(world_pos, point_on_road(road, 0.5))
+        if dist < closest[1]:
+            closest = (road, dist)
+    if closest[1] < 100:
+        selected = closest[0]
 
-    pos = (point[0] - (size / 2), point[1] - (size / 2))
-    dim = (size, size)
+        return selected
 
-    square = pygame.Rect(point, dim)
-    pygame.draw.rect(screen, color, square)
+    return None
 
 
 def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
-    size = square_size * zoom
-
-    x_max = math.ceil(screen.get_width() / square_size)
-    y_max = math.ceil(screen.get_height() / square_size)
+    x_max = math.ceil(screen.get_width() / square_size) + 1
+    y_max = math.ceil(screen.get_height() / square_size) + 1
 
     for x in range(0, x_max):
         for y in range(0, y_max):
-            world_point = (((x * square_size) - pan[0]) / zoom,
-                           ((y * square_size) - pan[1]) / zoom)
             screen_point = (x * square_size,
                             y * square_size)
+            world_point = screen_to_world(screen_point, pan, zoom)
 
             intensity = population_point(world_point)
             color = (0, max(min(intensity * 100, 255), 0), 0)
@@ -263,11 +273,28 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
             pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
             dim = (square_size, square_size)
 
-            square = pygame.Rect(screen_point, dim)
-            pygame.draw.rect(screen, color, square)
+            pygame.draw.rect(screen, color, pygame.Rect(pos, dim))
 
 
-def zoom_change(prev, increment, center, pan): # center should be a screen coordinate, not a transformed world pos
+def draw_sectors(screen: pygame.Surface, pan, zoom):
+    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // 2000) + 1
+    x_max = round(screen_to_world((SCREEN_RES[0], 0), pan, zoom)[0] // 2000) + 1
+
+    x_range = range(x_min, x_max)
+    for x in x_range:
+        pos_x = world_to_screen((2000 * x, 0), pan, zoom)[0]
+        pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, SCREEN_RES[1]))
+
+    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // 2000) + 1
+    y_max = round(screen_to_world((0, SCREEN_RES[1]), pan, zoom)[1] // 2000) + 1
+
+    y_range = range(y_min, y_max)
+    for y in y_range:
+        pos_y = world_to_screen((0, 2000 * y), pan, zoom)[1]
+        pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (SCREEN_RES[0], pos_y))
+
+
+def zoom_change(prev, increment, center, pan):
     new_step = prev + increment
 
     old_level = zoom_at(prev)
@@ -278,20 +305,14 @@ def zoom_change(prev, increment, center, pan): # center should be a screen coord
 
     world_pan = sub_lines(new_world, old_world)
 
-    #print("Old: " + str(old_world) + ", New: " + str(new_world))
-
     return new_level, world_to_screen(world_pan, (0, 0), new_level)
 
 
 def zoom_at(step):
     return math.pow((step / 12) + 1, 2)
-    #1 + (step * 0.5)#
-
-def int_pos(float_tuple):
-    return math.floor(float_tuple[0]), math.floor(float_tuple[1])
 
 
-def path_to_road(start, end, all_roads):
+def path_dijkstra(start, end, all_roads):
     node_queue = heapdict()
     for road in all_roads:
         road.pathing_dist_start = 0 if road is start else 9999999
@@ -378,10 +399,7 @@ def main():
     path_start = None
     path_end = None
 
-    selected_road = None
-    selected_start_ids = []
-    selected_end_ids = []
-    selected_connections = []
+    selection = None
 
     zoom_level = 1
     zoom_increment = 0
@@ -431,6 +449,7 @@ def main():
                     for road in roads:
                         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                                             point_on_road(road, 0.5)))
+                # Debug Views
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
                     DEBUG_INFO = not DEBUG_INFO
@@ -448,33 +467,14 @@ def main():
                 elif event.key == pygame.K_4:
                     global DEBUG_HEATMAP
                     DEBUG_HEATMAP = not DEBUG_HEATMAP
-                elif event.key == pygame.K_r:
-                    global DEBUG_NEW_FEATURE
-                    DEBUG_NEW_FEATURE = not DEBUG_NEW_FEATURE
-                    roads = generate()
-                    road_labels = []
-
-                    for road in roads:
-                        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                                            point_on_road(road, 0.5),
-                                            road.global_id))
+                elif event.key == pygame.K_5:
+                    global DEBUG_SECTORS
+                    DEBUG_SECTORS = not DEBUG_SECTORS
+                # Pathing
                 elif event.key == pygame.K_z:
-                    closest = (None, 9999)
-                    for road in roads:
-                        dist = dist_points(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), point_on_road(road, 0.5))
-                        if dist < closest[1]:
-                            closest = (road, dist)
-                    if closest[1] < 100:
-                        path_start = closest[0]
+                    path_start = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
                 elif event.key == pygame.K_x:
-                    closest = (None, 9999)
-                    for road in roads:
-                        dist = dist_points(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level),
-                                           point_on_road(road, 0.5))
-                        if dist < closest[1]:
-                            closest = (road, dist)
-                    if closest[1] < 100:
-                        path_end = closest[0]
+                    path_end = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
                 elif event.key == pygame.K_c:
                     path_data = path_astar(path_start, path_end, roads)
                     path = path_data[0]
@@ -486,24 +486,22 @@ def main():
                 prev_mouse = pygame.mouse.get_pos()
             else:
                 if pygame.mouse.get_pos() == drag_start:
-                    closest = (None, 9999)
-                    for road in roads:
-                        dist = dist_points(screen_to_world(drag_start, viewport_pos, zoom_level), point_on_road(road, 0.5))
-                        if dist < closest[1]:
-                            closest = (road, dist)
-                    if closest[1] < 100:
-                        selected_road = closest[0]
-                        selected_start_ids = []
-                        selected_end_ids = []
-                        selected_connections = []
-                        selected_sectors = set()
-                        set_selected(closest[0], selected_end_ids, selected_start_ids, selected_connections, selected_sectors)
+                    selected = select_nearby_road(screen_to_world(drag_start, viewport_pos, zoom_level), roads)
+                    if selected is not None:
+                        start_ids = []
+                        end_ids = []
+                        connections = []
+                        sectors = sectors_from_seg(selected)
+                        for road in selected.links_s:
+                            start_ids.append(road.global_id)
+                            connections.append(road)
+                        for road in selected.links_e:
+                            end_ids.append(road.global_id)
+                            connections.append(road)
+                        selection = (selected, connections, start_ids, end_ids, sectors)
                     else:
-                        selected_road = None
-                        selected_start_ids = []
-                        selected_end_ids = []
-                        selected_connections = []
-                        selected_sectors = set()
+                        selection = None
+
                 drag_start = None
         else:
             if pygame.mouse.get_pressed()[0]:
@@ -515,25 +513,11 @@ def main():
             draw_heatmap(screen, 50, viewport_pos, zoom_level)
 
         if DEBUG_SECTORS:
-            x_min = round(screen_to_world((0, 0), viewport_pos, zoom_level)[0] // 2000) + 1
-            x_max = round(screen_to_world((SCREEN_RES[0], 0), viewport_pos, zoom_level)[0] // 2000) + 1
+            draw_sectors(screen, viewport_pos, zoom_level)
 
-            x_range = range(x_min, x_max)
-            for x in x_range:
-                pos_x = world_to_screen((2000 * x, 0), viewport_pos, zoom_level)[0]
-                pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, SCREEN_RES[1]))
-
-            y_min = round(screen_to_world((0, 0), viewport_pos, zoom_level)[1] // 2000) + 1
-            y_max = round(screen_to_world((0, SCREEN_RES[1]), viewport_pos, zoom_level)[1] // 2000) + 1
-
-            y_range = range(y_min, y_max)
-            for y in y_range:
-                pos_y = world_to_screen((0, 2000 * y), viewport_pos, zoom_level)[1]
-                pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (SCREEN_RES[0], pos_y))
-
-
-        for road in roads:
-            draw_road(screen, road, selected_road, selected_connections, path, path_start, path_end, path_searched, viewport_pos, zoom_level)
+        draw_all_roads(roads, screen, viewport_pos, zoom_level)
+        draw_roads_selected(selection, screen, viewport_pos, zoom_level)
+        draw_roads_path(path, path_searched, path_start, path_end, screen, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
             debug_labels_left = []
@@ -548,17 +532,17 @@ def main():
             debug_labels_left.append("Pan: {}".format(viewport_pos))
             debug_labels_left.append("Zoom: {}x".format(str(zoom_level)))
 
-            if selected_road is not None:
-                debug_labels_left.append("Selected: {}".format(str(selected_road.global_id)))
-                if selected_road.parent is not None:
-                    debug_labels_left.append("    Parent: {}".format(str(selected_road.parent.global_id)))
+            if selection is not None:
+                debug_labels_left.append("Selected: {}".format(str(selection[0].global_id)))
+                if selection[0].parent is not None:
+                    debug_labels_left.append("    Parent: {}".format(str(selection[0].parent.global_id)))
                 else:
                     debug_labels_left.append("    Parent: None")
-                debug_labels_left.append("    dir: {}".format(str(selected_road.dir())))
-                debug_labels_left.append("    links_s: {}".format(str(selected_start_ids)))
-                debug_labels_left.append("    links_s: {}".format(str(selected_end_ids)))
-                debug_labels_left.append("    has_snapped: {}".format(str(selected_road.has_snapped)))
-                debug_labels_left.append("    sectors: {}".format(str(selected_sectors)))
+                debug_labels_left.append("    dir: {}".format(str(selection[0].dir())))
+                debug_labels_left.append("    links_s: {}".format(str(selection[2])))
+                debug_labels_left.append("    links_e: {}".format(str(selection[3])))
+                debug_labels_left.append("    has_snapped: {}".format(str(selection[0].has_snapped)))
+                debug_labels_left.append("    sectors: {}".format(str(selection[4])))
             else:
                 debug_labels_left.append("Selected: None")
 
@@ -706,6 +690,8 @@ def generate(manual_seed=None):
         seed = time.process_time()
     else:
         seed = manual_seed
+
+    print("Generating {} segments with seed: {}".format(seed, MAX_SEGS))
 
     random.seed(seed)
     global all_intersections
