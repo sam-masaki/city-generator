@@ -83,12 +83,18 @@ class Stopwatch:
         return self.total_ns / 1000000000
 
     def avg_ns(self):
+        if self.num_runs == 0:
+            return 0
         return self.total_ns / self.num_runs
 
     def avg_ms(self):
+        if self.num_runs == 0:
+            return 0
         return self.passed_ms() / self.num_runs
 
     def avg_s(self):
+        if self.num_runs == 0:
+            return 0
         return self.passed_s() / self.num_runs
 
 
@@ -779,11 +785,11 @@ def generate(manual_seed=None):
 
     watch_total.stop()
     print("Time spent total: {}\n"
-          "    local constraints: {}\n"
+          "    local constraints: {}, number of runs: {}\n"
           "        overlap calc: {}, per calc (ns): {}\n"
           "        cross calc: {}, per calc (ns): {}\n"
           "        vert calc: {}, per calc (ns): {}".format(watch_total.passed_ms(),
-                                                            watch_local.passed_ms(),
+                                                            watch_local.passed_ms(), watch_local.num_runs,
                                                             watch_local_overlap.passed_ms(), watch_local_overlap.avg_ns(),
                                                             watch_local_cross.passed_ms(), watch_local_cross.avg_ns(),
                                                             watch_local_vert.passed_ms(), watch_local_vert.avg_ns()))
@@ -905,24 +911,24 @@ def global_goals(previous_segment: RoadSegment):
 
 
 def local_constraints(inspect_seg, segments, sector_segments):
-    watch_local.start()
+    # watch_local.start()
 
     priority = 0
     action = None
     last_inter_t = 1
     last_ext_t = 999
 
-    watch_local_overlap.start()
+    # watch_local_overlap.start()
     if not check_overlap(inspect_seg):
         return False
-    watch_local_overlap.stop()
+    # watch_local_overlap.stop()
 
     road_sectors = sectors_from_seg(inspect_seg)
     for sec in road_sectors:
         if sec not in sector_segments:
             continue
         for line in sector_segments[sec]:
-            watch_local_cross.start()
+            # watch_local_cross.start()
             inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
             if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
                 last_inter_t = inter[1]
@@ -930,14 +936,14 @@ def local_constraints(inspect_seg, segments, sector_segments):
 
                 action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
                 # ????consider finding nearby roads and delete if too similar
-            watch_local_cross.stop()
+            # watch_local_cross.stop()
 
-            watch_local_vert.start()
+            # watch_local_vert.start()
             if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
                 priority = 3
 
                 action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
-            watch_local_vert.stop()
+            # watch_local_vert.stop()
 
             if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
                 if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
@@ -947,7 +953,7 @@ def local_constraints(inspect_seg, segments, sector_segments):
                     action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
                     priority = 2
 
-    watch_local.stop()
+    # watch_local.stop()
 
     if action is not None:
         return action(None)
