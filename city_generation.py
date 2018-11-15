@@ -48,6 +48,49 @@ def road_from_dir(start, direction, length, is_highway, time_delay):
     return seg
 
 
+class Stopwatch:
+    def __init__(self):
+        self.num_runs = 0
+        self.total_ns = 0
+        self.last_start = 0
+        self.is_running = False
+
+    def start(self):
+        if not self.is_running:
+            self.num_runs += 1
+            self.last_start = time.time_ns()  # should I use monotonic_ns()?
+            self.is_running = True
+
+    def stop(self):
+        if self.is_running:
+            self.total_ns += time.time_ns() - self.last_start
+            self.is_running = False
+
+    def reset(self):
+        self.num_runs = 0
+        self.total_ns = 0
+        self.last_start = 0
+        self.is_running = False
+
+    def passed_ns(self):
+        return self.total_ns
+
+    def passed_ms(self):
+        return self.total_ns / 1000000
+
+    def passed_s(self):
+        return self.total_ns / 1000000000
+
+    def avg_ns(self):
+        return self.total_ns / self.num_runs
+
+    def avg_ms(self):
+        return self.passed_ms() / self.num_runs
+
+    def avg_s(self):
+        return self.passed_s() / self.num_runs
+
+
 class RoadSegment:
     seg_id = 0
 
@@ -671,18 +714,21 @@ def wiggle_branch():
     return random.randint(-3, 3)
 
 
-time_spent_generate = 0
-time_spent_local = 0
+watch_local = Stopwatch()
+watch_local_overlap = Stopwatch()
+watch_local_cross = Stopwatch()
+watch_local_vert = Stopwatch()
+watch_total = Stopwatch()
 
 
 def generate(manual_seed=None):
-    global time_spent_generate
-    global time_spent_local
+    watch_local.reset()
+    watch_local_overlap.reset()
+    watch_local_cross.reset()
+    watch_local_vert.reset()
+    watch_total.reset()
 
-    time_spent_generate = 0
-    time_spent_local = 0
-
-    time_spent = pygame.time.get_ticks()
+    watch_total.start()
 
     RoadSegment.seg_id = 0
     global seed
@@ -694,6 +740,7 @@ def generate(manual_seed=None):
     print("Generating {} segments with seed: {}".format(seed, MAX_SEGS))
 
     random.seed(seed)
+
     global all_intersections
     all_intersections = []
 
@@ -720,8 +767,16 @@ def generate(manual_seed=None):
                 road_queue.push(new_seg)
         loop_count += 1
 
-    time_spent_generate = pygame.time.get_ticks() - time_spent
-    print("Time spent in local constraints: {}\nTime spent generate: {}".format(time_spent_local, time_spent_generate))
+    watch_total.stop()
+    print("Time spent total: {}\n"
+          "    local constraints: {}\n"
+          "        overlap calc: {}, per calc (ns): {}\n"
+          "        cross calc: {}, per calc (ns): {}\n"
+          "        vert calc: {}, per calc (ns): {}".format(watch_total.passed_ms(),
+                                                            watch_local.passed_ms(),
+                                                            watch_local_overlap.passed_ms(), watch_local_overlap.avg_ns(),
+                                                            watch_local_cross.passed_ms(), watch_local_cross.avg_ns(),
+                                                            watch_local_vert.passed_ms(), watch_local_vert.avg_ns()))
 
     return segments
 
@@ -741,15 +796,15 @@ def sectors_from_seg(segment: RoadSegment):
     # this could be made variable depending on whether a road is only in one sector, or overlaps NSEW, or overlaps diag
     # and also it depends on the maximum possible road length
     # also this whole thing is in dire need of optimizing, but whatever
-    start_sector = (segment.start[0] // SECTOR_SIZE, segment.start[1] // SECTOR_SIZE)
-    end_sector = (segment.end[0] // SECTOR_SIZE, segment.end[1] // SECTOR_SIZE)
+    start_sector = sector_at(segment.start)
+    end_sector = sector_at(segment.end)
 
     all_sectors.add(start_sector)
     all_sectors.add(end_sector)
     
     start_secs = sectors_from_point(segment.start)
     end_secs = sectors_from_point(segment.end)
-    
+
     return start_secs.union(end_secs)
 
 
@@ -838,14 +893,57 @@ def global_goals(previous_segment: RoadSegment):
 
 
 def local_constraints(inspect_seg, segments, sector_segments):
+    watch_local.start()
+
     priority = 0
     action = None
     last_inter_t = 1
     last_ext_t = 999
 
-    # This part doesn't have false positives, but it does miss some lines it should catch
-    time_start = pygame.time.get_ticks()
+    watch_local_overlap.start()
+    if not check_overlap(inspect_seg):
+        return False
+    watch_local_overlap.stop()
 
+    road_sectors = sectors_from_seg(inspect_seg)
+    for sec in road_sectors:
+        if sec not in sector_segments:
+            continue
+        for line in sector_segments[sec]:
+            watch_local_cross.start()
+            inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
+            if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
+                last_inter_t = inter[1]
+                priority = 4
+
+                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
+                # ????consider finding nearby roads and delete if too similar
+            watch_local_cross.stop()
+
+            watch_local_vert.start()
+            if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
+                priority = 3
+
+                action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
+            watch_local_vert.stop()
+
+            if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
+                if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
+                    last_ext_t = inter[1]
+                    point = inter[0]
+
+                    action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
+                    priority = 2
+
+    watch_local.stop()
+
+    if action is not None:
+        return action(None)
+    return True
+
+
+def check_overlap(inspect_seg):
+    # This part doesn't have false positives, but it does miss some lines it should catch
     if inspect_seg.parent is not None:
         for road in inspect_seg.parent.links_e:
             if road is not inspect_seg:
@@ -861,37 +959,6 @@ def local_constraints(inspect_seg, segments, sector_segments):
                 if angle_between(inspect_seg.dir(), angle) < MIN_ANGLE_DIFF:
                     #inspect_seg.has_snapped = SnapType.DebugDeleted
                     return False
-    road_sectors = sectors_from_seg(inspect_seg)
-    for sec in road_sectors:
-        if sec not in sector_segments:
-            continue
-        for line in sector_segments[sec]:
-            inter = find_intersect(inspect_seg.start, inspect_seg.end, line.start, line.end)
-            if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
-                last_inter_t = inter[1]
-                priority = 4
-
-                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
-                # ????consider finding nearby roads and delete if too similar
-
-            if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
-                priority = 3
-
-                action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
-
-            if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
-                if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
-                    last_ext_t = inter[1]
-                    point = inter[0]
-
-                    action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
-                    priority = 2
-
-    global time_spent_local
-    time_spent_local += pygame.time.get_ticks() - time_start
-
-    if action is not None:
-        return action(None)
     return True
 
 
