@@ -31,6 +31,7 @@ DEBUG_ROAD_VIEW = DebugRoadViews.No
 DEBUG_ROAD_ORDER = False
 DEBUG_HEATMAP = False
 DEBUG_SECTORS = False
+DEBUG_ISOLATE_SECTOR = False
 
 DEBUG_NEW_FEATURE = False
 
@@ -435,7 +436,9 @@ def main():
 
     running = True
 
-    roads = generate()
+    result = generate()
+    roads = result[0]
+    sects = result[1]
 
     path = []
     path_searched = []
@@ -485,8 +488,9 @@ def main():
                         zoom_increment -= 1
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
-                    roads = generate()
-
+                    result = generate()
+                    roads = result[0]
+                    sects = result[1]
                     road_labels = []
 
                     for road in roads:
@@ -513,6 +517,9 @@ def main():
                 elif event.key == pygame.K_5:
                     global DEBUG_SECTORS
                     DEBUG_SECTORS = not DEBUG_SECTORS
+                elif event.key == pygame.K_6:
+                    global DEBUG_ISOLATE_SECTOR
+                    DEBUG_ISOLATE_SECTOR = not DEBUG_ISOLATE_SECTOR
                 # Pathing
                 elif event.key == pygame.K_z:
                     path_start = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
@@ -558,7 +565,10 @@ def main():
         if DEBUG_SECTORS:
             draw_sectors(screen, viewport_pos, zoom_level)
 
-        draw_all_roads(roads, screen, viewport_pos, zoom_level)
+        if DEBUG_ISOLATE_SECTOR and selection is not None:
+            draw_all_roads(sects[sector_at(point_on_road(selection[0], 0.5))], screen, viewport_pos, zoom_level)
+        else:
+            draw_all_roads(roads, screen, viewport_pos, zoom_level)
         draw_roads_selected(selection, screen, viewport_pos, zoom_level)
         draw_roads_path(path, path_searched, path_start, path_end, screen, viewport_pos, zoom_level)
 
@@ -778,7 +788,7 @@ def generate(manual_seed=None):
                                                             watch_local_cross.passed_ms(), watch_local_cross.avg_ns(),
                                                             watch_local_vert.passed_ms(), watch_local_vert.avg_ns()))
 
-    return segments
+    return segments, sector_segments
 
 
 def add_to_sector(new_seg, sectors):
@@ -801,9 +811,11 @@ def sectors_from_seg(segment: RoadSegment):
 
     all_sectors.add(start_sector)
     all_sectors.add(end_sector)
-    
-    start_secs = sectors_from_point(segment.start)
-    end_secs = sectors_from_point(segment.end)
+
+    edge_dist = MIN_DIST_EDGE_CONTAINED if start_sector == end_sector else MIN_DIST_EDGE_CROSS
+
+    start_secs = sectors_from_point(segment.start, edge_dist)
+    end_secs = sectors_from_point(segment.end, edge_dist)
 
     return start_secs.union(end_secs)
 
@@ -812,26 +824,26 @@ def sector_at(point):
     return point[0] // SECTOR_SIZE, point[1] // SECTOR_SIZE
 
 
-def sectors_from_point(point):
+def sectors_from_point(point, distance):
     start_sector = sector_at(point)
     
     sectors = {start_sector}
     
-    if point[0] % SECTOR_SIZE < MIN_DIST_EDGE:
+    if point[0] % SECTOR_SIZE < distance:
         sectors.add((start_sector[0] - 1, start_sector[1]))
-        if point[1] % SECTOR_SIZE < MIN_DIST_EDGE:
+        if point[1] % SECTOR_SIZE < distance:
             sectors.add((start_sector[0] - 1, start_sector[1] - 1))
-        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] - 1, start_sector[1] + 1))
-    elif SECTOR_SIZE - (point[0] % SECTOR_SIZE) < MIN_DIST_EDGE:
+    elif SECTOR_SIZE - (point[0] % SECTOR_SIZE) < distance:
         sectors.add((start_sector[0] + 1, start_sector[1]))
-        if SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+        if SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] + 1, start_sector[1] + 1))
-        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] + 1, start_sector[1] - 1))
-    if point[1] % SECTOR_SIZE < MIN_DIST_EDGE:
+    if point[1] % SECTOR_SIZE < distance:
         sectors.add((start_sector[0], start_sector[1] - 1))
-    elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < MIN_DIST_EDGE:
+    elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
         sectors.add((start_sector[0], start_sector[1] + 1))
 
     return sectors
