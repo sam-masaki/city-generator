@@ -574,7 +574,12 @@ def main():
         if DEBUG_ISOLATE_SECTOR and selection is not None:
             draw_all_roads(sects[sector_at(point_on_road(selection[0], 0.5))], screen, viewport_pos, zoom_level)
         else:
-            draw_all_roads(roads, screen, viewport_pos, zoom_level)
+            tl_sect = sector_at(screen_to_world((0, 0), viewport_pos, zoom_level))
+            br_sect = sector_at(screen_to_world(SCREEN_RES, viewport_pos, zoom_level))
+            for x in range(tl_sect[0], br_sect[0] + 1):
+                for y in range(tl_sect[1], br_sect[1] + 1):
+                    if (x, y) in sects:
+                        draw_all_roads(sects[(x, y)], screen, viewport_pos, zoom_level)
         draw_roads_selected(selection, screen, viewport_pos, zoom_level)
         draw_roads_path(path, path_searched, path_start, path_end, screen, viewport_pos, zoom_level)
 
@@ -827,7 +832,7 @@ def sectors_from_seg(segment: RoadSegment):
 
 
 def sector_at(point):
-    return point[0] // SECTOR_SIZE, point[1] // SECTOR_SIZE
+    return int(point[0] // SECTOR_SIZE), int(point[1] // SECTOR_SIZE)
 
 
 def sectors_from_point(point, distance):
