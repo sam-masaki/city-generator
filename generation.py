@@ -14,7 +14,7 @@ watch_total = Stopwatch()
 
 
 def generate(manual_seed=None):
-
+    watch_total.reset()
     watch_total.start()
 
     roads.Segment.seg_id = 0
@@ -198,9 +198,11 @@ def snap_to_cross(mod_road, all_segments, sector_segments, other_road: roads.Seg
     # take precedence unless doing so causes a new intersection, then it should go back to intersecting. The main issue
     # is how to do that without wasting a ton of calculations, since this seems to happen a fair amount (at least the
     # crossing is too close part). Dividing the full list of segments into sectors could make that recalculation be ok
+    if crossing[1] < 0.05:
+        return False
     if crossing[2] < 0.05:
         return snap_to_vert(mod_road, other_road, False, True)
-    elif crossing[2] > 0.95:
+    if crossing[2] > 0.95:
         return snap_to_vert(mod_road, other_road, True, True)
     else:
         start_links = other_road.links_s

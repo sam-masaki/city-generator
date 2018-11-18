@@ -167,6 +167,7 @@ def main():
                 debug_labels_left.append("    links_e: {}".format(str(selection[3])))
                 debug_labels_left.append("    has_snapped: {}".format(str(selection[0].has_snapped)))
                 debug_labels_left.append("    sectors: {}".format(str(selection[4])))
+                debug_labels_left.append("    length: {}".format(selection[0].length()))
             else:
                 debug_labels_left.append("Selected: None")
             debug_labels_left.append("Path Length: {}".format(path_data.length))
