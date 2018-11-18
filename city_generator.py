@@ -60,7 +60,6 @@ def main():
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode(event.dict["size"], pygame.RESIZABLE)
                 config.SCREEN_RES = event.dict["size"]
-                print(config.SCREEN_RES)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     result = generate()
