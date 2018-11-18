@@ -10,13 +10,14 @@ import sectors
 import vectors
 from SnapType import SnapType
 import config
-from debug import *
+import debug
 from generation import generate
+import drawing
 
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE)
+    draw_data = drawing.ScreenData(pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE), (0, 0), 1)
     gohu_font = pygame.font.SysFont("GohuFont", 11)
 
     result = generate()
@@ -28,11 +29,9 @@ def main():
     selection = None
 
     # Inter-frame Variables
-    zoom_level = 1
     zoom_increment = 0
     prev_mouse = (0, 0)
     drag_start = None
-    viewport_pos = (0, 0)
     prev_pressed = (False, False, False)
     prev_time = pygame.time.get_ticks()
 
@@ -42,15 +41,15 @@ def main():
             continue
 
         mouse_pos = pygame.mouse.get_pos()
-        mouse_world_pos = screen_to_world(mouse_pos, viewport_pos, zoom_level)
+        mouse_world_pos = drawing.screen_to_world(mouse_pos, draw_data)
         prev_time = pygame.time.get_ticks()
-        screen.fill((0, 0, 0))
+        draw_data.screen.fill((0, 0, 0))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode(event.dict["size"], pygame.RESIZABLE)
+                draw_data.screen = pygame.display.set_mode(event.dict["size"], pygame.RESIZABLE)
                 config.SCREEN_RES = event.dict["size"]
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
@@ -59,33 +58,27 @@ def main():
                     all_sectors = result[1]
                 # Debug Views
                 elif event.key == pygame.K_1:
-                    global DEBUG_INFO
-                    DEBUG_INFO = not DEBUG_INFO
+                    debug.SHOW_INFO = not debug.SHOW_INFO
                 elif event.key == pygame.K_2:
-                    global DEBUG_ROAD_VIEW
-                    if DEBUG_ROAD_VIEW == DebugRoadViews.No:
-                        DEBUG_ROAD_VIEW = DebugRoadViews.Snaps
-                    elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
-                        DEBUG_ROAD_VIEW = DebugRoadViews.No
-                    elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
-                        DEBUG_ROAD_VIEW = DebugRoadViews.Branches
+                    if debug.SHOW_ROAD_VIEW == debug.RoadViews.No:
+                        debug.SHOW_ROAD_VIEW = debug.RoadViews.Snaps
+                    elif debug.SHOW_ROAD_VIEW == debug.RoadViews.Branches:
+                        debug.SHOW_ROAD_VIEW = debug.RoadViews.No
+                    elif debug.SHOW_ROAD_VIEW == debug.RoadViews.Snaps:
+                        debug.SHOW_ROAD_VIEW = debug.RoadViews.Branches
                 elif event.key == pygame.K_3:
-                    global DEBUG_ROAD_ORDER
-                    DEBUG_ROAD_ORDER = not DEBUG_ROAD_ORDER
-                    if DEBUG_ROAD_ORDER:
+                    debug.SHOW_ROAD_ORDER = not debug.SHOW_ROAD_ORDER
+                    if debug.SHOW_ROAD_ORDER:
                         road_labels = []
                         for road in all_roads:
                             road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                                                 road.point_at(0.5)))
                 elif event.key == pygame.K_4:
-                    global DEBUG_HEATMAP
-                    DEBUG_HEATMAP = not DEBUG_HEATMAP
+                    debug.SHOW_HEATMAP = not debug.SHOW_HEATMAP
                 elif event.key == pygame.K_5:
-                    global DEBUG_SECTORS
-                    DEBUG_SECTORS = not DEBUG_SECTORS
+                    debug.SHOW_SECTORS = not debug.SHOW_SECTORS
                 elif event.key == pygame.K_6:
-                    global DEBUG_ISOLATE_SECTOR
-                    DEBUG_ISOLATE_SECTOR = not DEBUG_ISOLATE_SECTOR
+                    debug.SHOW_ISOLATE_SECTOR = not debug.SHOW_ISOLATE_SECTOR
 
                 # Pathing
                 elif event.key == pygame.K_z:
@@ -99,25 +92,21 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Zooming
                 if event.button == 4:
-                    good_var_name = zoom_change(zoom_increment, 1, mouse_pos, viewport_pos)
-                    zoom_level = good_var_name[0]
-                    viewport_pos = vectors.add(viewport_pos, good_var_name[1])
+                    zoom_change(zoom_increment, 1, mouse_pos, draw_data)
                     zoom_increment += 1
                 elif event.button == 5:
                     if zoom_increment > -11:
-                        good_var_name = zoom_change(zoom_increment, -1, mouse_pos, viewport_pos)
-                        zoom_level = good_var_name[0]
-                        viewport_pos = vectors.add(viewport_pos, good_var_name[1])
+                        zoom_change(zoom_increment, -1, mouse_pos, draw_data)
                         zoom_increment -= 1
 
         # Dragging
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
-                viewport_pos = vectors.add(viewport_pos, vectors.sub(mouse_pos, prev_mouse))
+                draw_data.pan = vectors.add(draw_data.pan, vectors.sub(mouse_pos, prev_mouse))
                 prev_mouse = mouse_pos
             else:
                 if mouse_pos == drag_start:
-                    selected = select_nearby_road(screen_to_world(drag_start, viewport_pos, zoom_level), all_roads)
+                    selected = select_nearby_road(drawing.screen_to_world(drag_start, draw_data), all_roads)
                     if selected is not None:
                         start_ids = []
                         end_ids = []
@@ -141,24 +130,23 @@ def main():
         prev_pressed = pygame.mouse.get_pressed()
 
         # Drawing
-        if DEBUG_HEATMAP:
-            draw_heatmap(screen, 50, viewport_pos, zoom_level)
-        if DEBUG_SECTORS:
-            draw_sectors(screen, viewport_pos, zoom_level)
-        if DEBUG_ISOLATE_SECTOR and selection is not None:
-            draw_all_roads(all_sectors[sectors.containing_sector(selection[0].point_at(0.5))],
-                           screen, viewport_pos, zoom_level)
+        if debug.SHOW_HEATMAP:
+            drawing.draw_heatmap(50, draw_data)
+        if debug.SHOW_SECTORS:
+            drawing.draw_sectors(draw_data)
+        if debug.SHOW_ISOLATE_SECTOR and selection is not None:
+            drawing.draw_all_roads(all_sectors[sectors.containing_sector(selection[0].point_at(0.5))], draw_data)
         else:
-            tl_sect = sectors.containing_sector(screen_to_world((0, 0), viewport_pos, zoom_level))
-            br_sect = sectors.containing_sector(screen_to_world(config.SCREEN_RES, viewport_pos, zoom_level))
+            tl_sect = sectors.containing_sector(drawing.screen_to_world((0, 0), draw_data))
+            br_sect = sectors.containing_sector(drawing.screen_to_world(config.SCREEN_RES, draw_data))
             for x in range(tl_sect[0], br_sect[0] + 1):
                 for y in range(tl_sect[1], br_sect[1] + 1):
                     if (x, y) in all_sectors:
-                        draw_all_roads(all_sectors[(x, y)], screen, viewport_pos, zoom_level)
-        draw_roads_selected(selection, screen, viewport_pos, zoom_level)
-        draw_roads_path(path_data, screen, viewport_pos, zoom_level)
+                        drawing.draw_all_roads(all_sectors[(x, y)], draw_data)
+        drawing.draw_roads_selected(selection, draw_data)
+        drawing.draw_roads_path(path_data, draw_data)
 
-        if DEBUG_INFO:
+        if debug.SHOW_INFO:
             debug_labels_left = []
             debug_labels_right = []
 
@@ -166,8 +154,8 @@ def main():
             debug_labels_left.append("    (world): {}".format(mouse_world_pos))
             debug_labels_left.append("    pop_at: {}".format(population.at_point(mouse_world_pos)))
             debug_labels_left.append("    sec_at: {}".format(sectors.containing_sector(mouse_world_pos)))
-            debug_labels_left.append("Pan: {}".format(viewport_pos))
-            debug_labels_left.append("Zoom: {}x".format(str(zoom_level)))
+            debug_labels_left.append("Pan: {}".format(draw_data.pan))
+            debug_labels_left.append("Zoom: {}x".format(str(draw_data.zoom)))
 
             if selection is not None:
                 debug_labels_left.append("Selected: {}".format(str(selection[0].global_id)))
@@ -190,21 +178,19 @@ def main():
 
             height = 10
             for label in debug_labels_left:
-                screen.blit(gohu_font.render(label, False, (255, 255, 255), (0, 0, 0)),
-                            (10, height))
+                draw_data.screen.blit(gohu_font.render(label, False, (255, 255, 255), (0, 0, 0)), (10, height))
                 height += 15
 
             height = 10
             for label in debug_labels_right:
                 surf = gohu_font.render(label, False, (255, 255, 255))
-                screen.blit(surf,
-                            (config.SCREEN_RES[0] - surf.get_width() - 10, height))
+                draw_data.screen.blit(surf, (config.SCREEN_RES[0] - surf.get_width() - 10, height))
                 height += 15
-        if DEBUG_ROAD_ORDER:
+        if debug.SHOW_ROAD_ORDER:
             for label in road_labels:
-                label_pos = world_to_screen(label[1], viewport_pos, zoom_level)
+                label_pos = drawing.world_to_screen(label[1], draw_data)
                 if -20 < label_pos[0] < config.SCREEN_RES[0] and -20 < label_pos[1] < config.SCREEN_RES[1]:
-                    screen.blit(label[0], label_pos)
+                    draw_data.screen.blit(label[0], label_pos)
 
         pygame.display.flip()
 
@@ -223,127 +209,20 @@ def select_nearby_road(world_pos: Tuple[float, float], all_roads: List[roads.Seg
     return None
 
 
-def world_to_screen(world_pos, pan, zoom):
-    result = ((world_pos[0] * zoom) + pan[0],
-              (world_pos[1] * zoom) + pan[1])
-    return result
-
-
-def screen_to_world(screen_pos, pan, zoom):
-    result = (((screen_pos[0] - pan[0]) / zoom),
-              ((screen_pos[1] - pan[1]) / zoom))
-    return result
-
-
-def draw_all_roads(all_roads, screen, pan, zoom):
-    for road in all_roads:
-        width = config.ROAD_WIDTH
-        color = (255, 255, 255)
-
-        if road.is_highway:
-            width = config.ROAD_WIDTH_HIGHWAY
-            color = (255, 0, 0)
-        elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
-            if road.has_snapped == SnapType.Cross:
-                color = (255, 100, 100)
-            elif road.has_snapped == SnapType.End:
-                color = (100, 255, 100)
-            elif road.has_snapped == SnapType.Extend:
-                color = (100, 100, 255)
-            elif road.has_snapped == SnapType.CrossTooClose:
-                color = (100, 255, 255)
-        elif DEBUG_ROAD_VIEW == DebugRoadViews.Branches:
-            if road.is_branch:
-                color = (100, 255, 100)
-        if road.has_snapped == SnapType.DebugDeleted:
-            color = (0, 255, 0)
-
-        draw_road(road, color, width, screen, pan, zoom)
-
-
-def draw_roads_selected(selection, screen, pan, zoom):
-    if selection is not None:
-        draw_road(selection[0], (255, 255, 0), config.ROAD_WIDTH_SELECTION, screen, pan, zoom)
-
-        for road in selection[1]:
-            draw_road(road, (0, 255, 0), config.ROAD_WIDTH_SELECTION, screen, pan, zoom)
-
-
-def draw_roads_path(path_data: pathing.PathData, screen, pan, zoom):
-    if len(path_data.searched) != 0:
-        width = config.ROAD_WIDTH_PATH
-        color = (255, 0, 255)
-
-        for road in path_data.searched:
-            draw_road(road, color, width, screen, pan, zoom)
-
-    if len(path_data.path) != 0:
-        width = config.ROAD_WIDTH_PATH
-        color = (0, 255, 255)
-        for road in path_data.path:
-            draw_road(road, color, width, screen, pan, zoom)
-
-    width = config.ROAD_WIDTH_PATH
-    if path_data.start is not None:
-        draw_road(path_data.start, (0, 255, 0), width, screen, pan, zoom)
-    if path_data.end is not None:
-        draw_road(path_data.end, (255, 0, 0), width, screen, pan, zoom)
-
-
-def draw_road(road, color, width, screen, pan, zoom):
-    pygame.draw.line(screen, color, world_to_screen(road.start, pan, zoom),
-                     world_to_screen(road.end, pan, zoom), width)
-
-
-def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
-    x_max = vectors.math.ceil(screen.get_width() / square_size) + 1
-    y_max = vectors.math.ceil(screen.get_height() / square_size) + 1
-
-    for x in range(0, x_max):
-        for y in range(0, y_max):
-            screen_point = (x * square_size,
-                            y * square_size)
-            world_point = screen_to_world(screen_point, pan, zoom)
-
-            intensity = population.at_point(world_point)
-            color = (0, max(min(intensity * 100, 255), 0), 0)
-
-            pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
-            dim = (square_size, square_size)
-
-            pygame.draw.rect(screen, color, pygame.Rect(pos, dim))
-
-
-def draw_sectors(screen: pygame.Surface, pan, zoom):
-    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // config.SECTOR_SIZE) + 1
-    x_max = round(screen_to_world((config.SCREEN_RES[0], 0), pan, zoom)[0] // config.SECTOR_SIZE) + 1
-
-    x_range = range(x_min, x_max)
-    for x in x_range:
-        pos_x = world_to_screen((config.SECTOR_SIZE * x, 0), pan, zoom)[0]
-        pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, config.SCREEN_RES[1]))
-
-    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // config.SECTOR_SIZE) + 1
-    y_max = round(screen_to_world((0, config.SCREEN_RES[1]), pan, zoom)[1] // config.SECTOR_SIZE) + 1
-
-    y_range = range(y_min, y_max)
-    for y in y_range:
-        pos_y = world_to_screen((0, config.SECTOR_SIZE * y), pan, zoom)[1]
-        pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (config.SCREEN_RES[0], pos_y))
-
-
-def zoom_change(prev, increment, center, pan):
+def zoom_change(prev, increment, center, data):
     new_step = prev + increment
 
     old_level = zoom_at(prev)
     new_level = zoom_at(new_step)
 
-    old_world = screen_to_world(center, pan, old_level)
-    new_world = screen_to_world(center, pan, new_level)
+    old_world = drawing.screen_to_world(center, drawing.ScreenData(None, data.pan, old_level))
+    new_world = drawing.screen_to_world(center, drawing.ScreenData(None, data.pan, new_level))
 
     world_pan = vectors.sub(new_world, old_world)
 
-    return new_level, world_to_screen(world_pan, (0, 0), new_level)
+    data.zoom = new_level
+    data.pan = vectors.add(data.pan, drawing.world_to_screen(world_pan, drawing.ScreenData(None, (0, 0), new_level)))
+    return
 
 
 def zoom_at(step):

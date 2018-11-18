@@ -1,4 +1,4 @@
-from config import *
+import config
 import roads
 from typing import Dict, Tuple, List
 
@@ -24,7 +24,7 @@ def from_seg(segment: roads.Segment):
     all_sectors.add(start_sector)
     all_sectors.add(end_sector)
 
-    edge_dist = MIN_DIST_EDGE_CONTAINED if start_sector == end_sector else MIN_DIST_EDGE_CROSS
+    edge_dist = config.MIN_DIST_EDGE_CONTAINED if start_sector == end_sector else config.MIN_DIST_EDGE_CROSS
 
     start_secs = from_point(segment.start, edge_dist)
     end_secs = from_point(segment.end, edge_dist)
@@ -37,24 +37,25 @@ def from_point(point, distance):
 
     sectors = {start_sector}
 
-    if point[0] % SECTOR_SIZE < distance:
+    if point[0] % config.SECTOR_SIZE < distance:
         sectors.add((start_sector[0] - 1, start_sector[1]))
-        if point[1] % SECTOR_SIZE < distance:
+        if point[1] % config.SECTOR_SIZE < distance:
             sectors.add((start_sector[0] - 1, start_sector[1] - 1))
-        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
+        elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] - 1, start_sector[1] + 1))
-    elif SECTOR_SIZE - (point[0] % SECTOR_SIZE) < distance:
+    elif config.SECTOR_SIZE - (point[0] % config.SECTOR_SIZE) < distance:
         sectors.add((start_sector[0] + 1, start_sector[1]))
-        if SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
+        if config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] + 1, start_sector[1] + 1))
-        elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
+        elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
             sectors.add((start_sector[0] + 1, start_sector[1] - 1))
-    if point[1] % SECTOR_SIZE < distance:
+    if point[1] % config.SECTOR_SIZE < distance:
         sectors.add((start_sector[0], start_sector[1] - 1))
-    elif SECTOR_SIZE - (point[1] % SECTOR_SIZE) < distance:
+    elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
         sectors.add((start_sector[0], start_sector[1] + 1))
 
     return sectors
 
+
 def containing_sector(point):
-    return int(point[0] // SECTOR_SIZE), int(point[1] // SECTOR_SIZE)
+    return int(point[0] // config.SECTOR_SIZE), int(point[1] // config.SECTOR_SIZE)

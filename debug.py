@@ -1,15 +1,15 @@
 import enum
 
 
-class DebugRoadViews(enum.Enum):
+class RoadViews(enum.Enum):
     No = enum.auto()
     Snaps = enum.auto()
     Branches = enum.auto()
 
 
-DEBUG_INFO = True
-DEBUG_ROAD_VIEW = DebugRoadViews.No
-DEBUG_ROAD_ORDER = False
-DEBUG_HEATMAP = False
-DEBUG_SECTORS = False
-DEBUG_ISOLATE_SECTOR = False
+SHOW_INFO = True
+SHOW_ROAD_VIEW = RoadViews.No
+SHOW_ROAD_ORDER = False
+SHOW_HEATMAP = False
+SHOW_SECTORS = False
+SHOW_ISOLATE_SECTOR = False
