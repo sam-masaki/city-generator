@@ -1,20 +1,17 @@
-import random
-import time
+import math
 from typing import List, Tuple
 
 import pygame
-from noise import snoise2
 
+import pathing
+import population
 import roads
+import sectors
+import vectors
 from SnapType import SnapType
 from config import *
 from debug import *
-import vectors
-import pathing
 from generation import generate
-import population
-import sectors
-import math
 
 
 def main():
@@ -102,10 +99,12 @@ def main():
                 elif event.key == pygame.K_x:
                     path_end = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
                 elif event.key == pygame.K_c:
-                    path_data = pathing.astar(path_start, path_end, roads)
+                    path_data = pathing.dijkstra(path_start, path_end, roads)
                     path = path_data[0]
                     path_searched = path_data[1]
             elif event.type == pygame.MOUSEBUTTONDOWN:
+
+                # Zooming
                 if event.button == 4:
                     good_var_name = zoom_change(zoom_increment, 1, pygame.mouse.get_pos(), viewport_pos)
                     zoom_level = good_var_name[0]

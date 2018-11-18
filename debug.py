@@ -1,5 +1,6 @@
 import enum
 
+
 class DebugRoadViews(enum.Enum):
     No = enum.auto()
     Snaps = enum.auto()

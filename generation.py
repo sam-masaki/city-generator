@@ -10,19 +10,10 @@ import vectors
 import math
 
 
-watch_local = Stopwatch()
-watch_local_overlap = Stopwatch()
-watch_local_cross = Stopwatch()
-watch_local_vert = Stopwatch()
 watch_total = Stopwatch()
 
 
 def generate(manual_seed=None):
-    watch_local.reset()
-    watch_local_overlap.reset()
-    watch_local_cross.reset()
-    watch_local_vert.reset()
-    watch_total.reset()
 
     watch_total.start()
 
@@ -32,7 +23,7 @@ def generate(manual_seed=None):
         ROAD_SEED = time.process_time()
     else:
         ROAD_SEED = manual_seed
-    print("Generating {} segments with seed: {}".format(ROAD_SEED, MAX_SEGS))
+    print("Generating {} segments with seed: {}".format(MAX_SEGS, ROAD_SEED))
     random.seed(ROAD_SEED)
 
     road_queue = roads.Queue()
@@ -59,16 +50,7 @@ def generate(manual_seed=None):
         loop_count += 1
 
     watch_total.stop()
-    print("Time spent total: {}\n"
-          "    local constraints: {}, number of runs: {}\n"
-          "        overlap calc: {}, per calc (ns): {}\n"
-          "        cross calc: {}, per calc (ns): {}\n"
-          "        vert calc: {}, per calc (ns): {}".format(watch_total.passed_ms(),
-                                                            watch_local.passed_ms(), watch_local.num_runs,
-                                                            watch_local_overlap.passed_ms(),
-                                                            watch_local_overlap.avg_ns(),
-                                                            watch_local_cross.passed_ms(), watch_local_cross.avg_ns(),
-                                                            watch_local_vert.passed_ms(), watch_local_vert.avg_ns()))
+    print("Time spent (ms): {}".format(watch_total.passed_ms()))
 
     return segments, sector_segments
 

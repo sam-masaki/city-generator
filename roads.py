@@ -37,10 +37,6 @@ class Segment:
         self.insertion_order = 0
         self.global_id = Segment.seg_id
 
-        self.pathing_dist_start = 9999999
-        self.pathing_dist_end = 9999999
-        self.pathing_prev = None
-
         Segment.seg_id += 1
 
     def __lt__(self, other):
@@ -72,23 +68,6 @@ class Segment:
             angle += 360
         return angle
 
-    def as_rect(self):
-        angle = self.dir()
-        width = 16 if self.is_highway else 6
-        list = []
-
-        point_1 = (self.start[0] + (width * math.cos(math.radians(angle + 90))), self.start[1] + (width * math.sin(math.radians(angle + 90))))
-        point_2 = (self.start[0] + (width * math.cos(math.radians(angle - 90))), self.start[1] + (width * math.sin(math.radians(angle - 90))))
-        point_3 = (self.end[0] + (width * math.cos(math.radians(angle + 90))), self.end[1] + (width * math.sin(math.radians(angle + 90))))
-        point_4 = (self.end[0] + (width * math.cos(math.radians(angle - 90))), self.end[1] + (width * math.sin(math.radians(angle - 90))))
-
-        list.append(point_1)
-        list.append(point_2)
-        list.append(point_3)
-        list.append(point_4)
-
-        return list
-
     def connect_links(self):
         if self.parent is not None:
             for road in self.parent.links_e:
@@ -116,14 +95,6 @@ class Segment:
                 print("OSEANOEMANOMEANOMANOEAMSOENAOMSAOENA")
 
         self.settled = True
-
-    def pathing_cost(self):
-        multiplier = 0.75 if self.is_highway else 1
-
-        return round(self.length() * multiplier * 0.1)
-
-    def pathing_heuristic(self, goal):
-        return vectors.distance(self.point_at(0.5), goal.point_at(0.5)) * 0.1
 
     def point_at(self, factor):
         end_vector = vectors.sub(self.end, self.start)
