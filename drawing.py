@@ -5,7 +5,6 @@ from SnapType import SnapType
 import pygame
 import math
 import population
-import vectors
 
 
 class ScreenData:

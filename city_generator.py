@@ -8,7 +8,6 @@ import population
 import roads
 import sectors
 import vectors
-from SnapType import SnapType
 import config
 import debug
 from generation import generate
