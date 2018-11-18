@@ -7,23 +7,18 @@ from heapdict import heapdict
 from noise import snoise2
 import enum
 from config import *
+from RoadSegment import *
+from Stopwatch import Stopwatch
+from SnapType import SnapType
+
+from vector_operations import *
+from typing import List, Tuple, Optional
 
 
 class DebugRoadViews(enum.Enum):
     No = enum.auto()
     Snaps = enum.auto()
     Branches = enum.auto()
-
-
-class SnapType(enum.Enum):
-    No = 0
-    Cross = 1
-    End = 2
-    Extend = 3
-    CrossTooClose = 4
-    Split = 5
-    DebugDeleted = 6
-    Shorten = 7
 
 
 DEBUG_INFO = True
@@ -41,173 +36,7 @@ seed = time.process_time()
 random.seed(seed)
 
 
-def road_from_dir(start, direction, length, is_highway, time_delay):
-    end_x = length * math.cos(math.radians(direction))
-    end_y = length * math.sin(math.radians(direction))
-
-    seg = RoadSegment(start, (end_x, end_y), is_highway, time_delay)
-    return seg
-
-
-class Stopwatch:
-    def __init__(self):
-        self.num_runs = 0
-        self.total_ns = 0
-        self.last_start = 0
-        self.is_running = False
-
-    def start(self):
-        if not self.is_running:
-            self.num_runs += 1
-            self.last_start = time.time_ns()  # should I use monotonic_ns()?
-            self.is_running = True
-
-    def stop(self):
-        if self.is_running:
-            self.total_ns += time.time_ns() - self.last_start
-            self.is_running = False
-
-    def reset(self):
-        self.num_runs = 0
-        self.total_ns = 0
-        self.last_start = 0
-        self.is_running = False
-
-    def passed_ns(self):
-        return self.total_ns
-
-    def passed_ms(self):
-        return self.total_ns / 1000000
-
-    def passed_s(self):
-        return self.total_ns / 1000000000
-
-    def avg_ns(self):
-        if self.num_runs == 0:
-            return 0
-        return self.total_ns / self.num_runs
-
-    def avg_ms(self):
-        if self.num_runs == 0:
-            return 0
-        return self.passed_ms() / self.num_runs
-
-    def avg_s(self):
-        if self.num_runs == 0:
-            return 0
-        return self.passed_s() / self.num_runs
-
-
-class RoadSegment:
-    seg_id = 0
-
-    def __init__(self, start, end, is_highway, time_delay=0):
-        self.start = start
-        self.end = end
-        self.is_highway = is_highway
-        self.t = time_delay
-        self.has_snapped = SnapType.No
-        self.is_branch = False
-
-        self.parent = None
-        self.links_s = set()
-        self.links_e = set()
-        self.settled = False
-
-        self.insertion_order = 0
-        self.global_id = RoadSegment.seg_id
-
-        self.pathing_dist_start = 9999999
-        self.pathing_dist_end = 9999999
-        self.pathing_prev = None
-
-        RoadSegment.seg_id += 1
-
-    def __lt__(self, other):
-        return self.t < other.t
-
-    def __gt__(self, other):
-        return self.t > other.t
-
-    def copy(self):
-        return RoadSegment(self.start, self.end, self.is_highway, self.t)
-
-    def make_continuation(self, length, offset, is_highway, is_branch, delay=0):
-        radian_dir = math.radians(self.dir() + offset)
-
-        end_x = self.end[0] + (length * math.cos(radian_dir))
-        end_y = self.end[1] + (length * math.sin(radian_dir))
-
-        road = RoadSegment(self.end, (end_x, end_y), is_highway, delay)
-        road.is_branch = is_branch
-
-        return road
-
-    def length(self):
-        return dist_points(self.start, self.end)
-
-    def dir(self):
-        angle = math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
-        if angle < 0:
-            angle += 360
-        return angle
-
-    def as_rect(self):
-        angle = self.dir()
-        width = 16 if self.is_highway else 6
-        list = []
-
-        point_1 = (self.start[0] + (width * math.cos(math.radians(angle + 90))), self.start[1] + (width * math.sin(math.radians(angle + 90))))
-        point_2 = (self.start[0] + (width * math.cos(math.radians(angle - 90))), self.start[1] + (width * math.sin(math.radians(angle - 90))))
-        point_3 = (self.end[0] + (width * math.cos(math.radians(angle + 90))), self.end[1] + (width * math.sin(math.radians(angle + 90))))
-        point_4 = (self.end[0] + (width * math.cos(math.radians(angle - 90))), self.end[1] + (width * math.sin(math.radians(angle - 90))))
-
-        list.append(point_1)
-        list.append(point_2)
-        list.append(point_3)
-        list.append(point_4)
-
-        return list
-
-    def connect_links(self):
-        if self.parent is not None:
-            for road in self.parent.links_e:
-                if self.start == road.end:
-                    road.links_e.add(self)
-                elif self.start == road.start:
-                    road.links_s.add(self)
-                else:
-                    print("AAAAAAAAAAAAAAA")
-
-                self.links_s.add(road)
-            self.parent.links_e.add(self)
-            self.links_s.add(self.parent)
-
-        for road in self.links_e:
-            if not road.settled:
-                print("Should this happen?")
-                continue
-
-            if self.end == road.start:
-                road.links_s.add(self)
-            elif self.end == road.end:
-                road.links_e.add(self)
-            else:
-                print("OSEANOEMANOMEANOMANOEAMSOENAOMSAOENA")
-
-        self.settled = True
-
-    def pathing_cost(self):
-        multiplier = 0.75 if self.is_highway else 1
-
-        return round(self.length() * multiplier * 0.1)
-
-    def pathing_heuristic(self, goal):
-        return dist_points(point_on_road(self, 0.5), point_on_road(goal, 0.5)) * 0.1
-
-
 class RoadQueue:
-
     def __init__(self):
         self.heap = []
 
@@ -293,10 +122,10 @@ def draw_road(road, color, width, screen, pan, zoom):
                      world_to_screen(road.end, pan, zoom), width)
 
 
-def select_nearby_road(world_pos, roads):
-    closest = (None, 9999)
+def select_nearby_road(world_pos: Tuple[float, float], roads: List[RoadSegment]) -> RoadSegment:
+    closest: Tuple[RoadSegment, float] = (None, 9999)
     for road in roads:
-        dist = dist_points(world_pos, point_on_road(road, 0.5))
+        dist = dist_vectors(world_pos, road.point_at(0.5))
         if dist < closest[1]:
             closest = (road, dist)
     if closest[1] < 100:
@@ -353,7 +182,7 @@ def zoom_change(prev, increment, center, pan):
     old_world = screen_to_world(center, pan, old_level)
     new_world = screen_to_world(center, pan, new_level)
 
-    world_pan = sub_lines(new_world, old_world)
+    world_pan = sub_vectors(new_world, old_world)
 
     return new_level, world_to_screen(world_pan, (0, 0), new_level)
 
@@ -469,7 +298,7 @@ def main():
 
     for road in roads:
         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                            point_on_road(road, 0.5)))
+                            road.point_at(0.5)))
 
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
@@ -480,18 +309,6 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 4:
-                    good_var_name = zoom_change(zoom_increment, 1, pygame.mouse.get_pos(), viewport_pos)
-                    zoom_level = good_var_name[0]
-                    viewport_pos = add_lines(viewport_pos, good_var_name[1])
-                    zoom_increment += 1
-                elif event.button == 5:
-                    if zoom_increment > -11:
-                        good_var_name = zoom_change(zoom_increment, -1, pygame.mouse.get_pos(), viewport_pos)
-                        zoom_level = good_var_name[0]
-                        viewport_pos = add_lines(viewport_pos, good_var_name[1])
-                        zoom_increment -= 1
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     result = generate()
@@ -501,7 +318,7 @@ def main():
 
                     for road in roads:
                         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                                            point_on_road(road, 0.5)))
+                                            road.point_at(0.5)))
                 # Debug Views
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
@@ -526,6 +343,7 @@ def main():
                 elif event.key == pygame.K_6:
                     global DEBUG_ISOLATE_SECTOR
                     DEBUG_ISOLATE_SECTOR = not DEBUG_ISOLATE_SECTOR
+
                 # Pathing
                 elif event.key == pygame.K_z:
                     path_start = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
@@ -535,10 +353,22 @@ def main():
                     path_data = path_astar(path_start, path_end, roads)
                     path = path_data[0]
                     path_searched = path_data[1]
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 4:
+                    good_var_name = zoom_change(zoom_increment, 1, pygame.mouse.get_pos(), viewport_pos)
+                    zoom_level = good_var_name[0]
+                    viewport_pos = add_vectors(viewport_pos, good_var_name[1])
+                    zoom_increment += 1
+                elif event.button == 5:
+                    if zoom_increment > -11:
+                        good_var_name = zoom_change(zoom_increment, -1, pygame.mouse.get_pos(), viewport_pos)
+                        zoom_level = good_var_name[0]
+                        viewport_pos = add_vectors(viewport_pos, good_var_name[1])
+                        zoom_increment -= 1
 
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
-                viewport_pos = add_lines(viewport_pos, sub_lines(pygame.mouse.get_pos(), prev_mouse))
+                viewport_pos = add_vectors(viewport_pos, sub_vectors(pygame.mouse.get_pos(), prev_mouse))
                 prev_mouse = pygame.mouse.get_pos()
             else:
                 if pygame.mouse.get_pos() == drag_start:
@@ -572,7 +402,7 @@ def main():
             draw_sectors(screen, viewport_pos, zoom_level)
 
         if DEBUG_ISOLATE_SECTOR and selection is not None:
-            draw_all_roads(sects[sector_at(point_on_road(selection[0], 0.5))], screen, viewport_pos, zoom_level)
+            draw_all_roads(sects[sector_at(selection[0].point_at(0.5))], screen, viewport_pos, zoom_level)
         else:
             tl_sect = sector_at(screen_to_world((0, 0), viewport_pos, zoom_level))
             br_sect = sector_at(screen_to_world(SCREEN_RES, viewport_pos, zoom_level))
@@ -636,60 +466,6 @@ def main():
         pygame.display.flip()
 
 
-def set_selected(new_selection, links_e_names, links_s_name, connected_roads, sectors):
-    for road in new_selection.links_s:
-        connected_roads.append(road)
-        links_s_name.append(road.global_id)
-    for road in new_selection.links_e:
-        connected_roads.append(road)
-        links_e_names.append(road.global_id)
-    secs = sectors_from_seg(new_selection)
-    for sect in secs:
-        sectors.add(sect)
-
-
-def add_lines(l1, l2):
-    return l1[0] + l2[0], l1[1] + l2[1]
-
-
-def sub_lines(l1, l2):
-    return l1[0] - l2[0], l1[1] - l2[1]
-
-
-def dist_points(p, q):
-    x_diff = q[0] - p[0]
-    y_diff = q[1] - p[1]
-    return math.sqrt(math.pow(x_diff, 2) + math.pow(y_diff, 2))
-
-
-def cross_product(line1, line2):
-    return (line1[0] * line2[1]) - (line1[1] * line2[0])
-
-
-def find_intersect(p, pe, q, qe):
-    r = sub_lines(pe, p)
-    s = sub_lines(qe, q)
-
-    uNumerator = cross_product(sub_lines(q, p), r)
-    tNumerator = cross_product(sub_lines(q, p), s)
-    denominator = cross_product(r, s)
-
-    if denominator == 0:
-        return None
-    u = uNumerator / denominator
-    t = tNumerator / denominator
-
-    if 0 < u < 1:
-        return (p[0] + (t * r[0]), p[1] + (t * r[1])), t, u
-
-    return None
-
-
-def point_on_road(road, factor):
-    end_vector = sub_lines(road.end, road.start)
-    return road.start[0] + (factor * end_vector[0]), road.start[1] + (factor * end_vector[1])
-
-
 all_intersections = []
 
 
@@ -702,15 +478,7 @@ def angle_between(a1, a2):
     reg = math.fabs(a1 - a2)
     res = min(reg, math.fabs(reg - 360))
 
-    #print("a1: {}, a2: {}, diff: {}".format(str(a1), str(a2), str(res)))
-
     return res
-
-
-def segment_length(point1, point2):
-    diff = sub_lines(point1, point2)
-
-    return math.sqrt((diff[0] * diff[0]) + (diff[1] * diff[1]))
 
 
 def population_level(seg):
@@ -725,14 +493,6 @@ def population_point(point):
     value2 = (snoise2((x/20000) + 500, (y/20000) + 500) + 1) / 2
     value3 = (snoise2((x/20000) + 1000, (y/20000) + 1000) + 1) / 2
     return math.pow(((value1 * value2) + value3), 2)
-
-
-def wiggle_highway():
-    return random.randint(-15, 15)
-
-
-def wiggle_branch():
-    return random.randint(-3, 3)
 
 
 watch_local = Stopwatch()
@@ -860,6 +620,14 @@ def sectors_from_point(point, distance):
     return sectors
 
 
+def highway_deviation():
+    return random.randint(-1 * HIGHWAY_MAX_ANGLE_DEV, HIGHWAY_MAX_ANGLE_DEV)
+
+
+def branch_deviation():
+    return random.randint(-1 * BRANCH_MAX_ANGLE_DEV, BRANCH_MAX_ANGLE_DEV)
+
+
 def global_goals(previous_segment: RoadSegment):
     new_segments = []
 
@@ -874,7 +642,7 @@ def global_goals(previous_segment: RoadSegment):
 
     if previous_segment.is_highway:
         wiggle_seg = previous_segment.make_continuation(HIGHWAY_LENGTH,
-                                                        wiggle_highway(),
+                                                        highway_deviation(),
                                                         True,
                                                         False)
         wiggle_pop = population_level(wiggle_seg)
@@ -889,7 +657,7 @@ def global_goals(previous_segment: RoadSegment):
         if ext_pop > HIGHWAY_BRANCH_POP and random.random() < HIGHWAY_BRANCH_CHANCE:
             sign = random.randrange(-1, 2, 2)
             branch = previous_segment.make_continuation(HIGHWAY_LENGTH,
-                                                        (90 * sign) + wiggle_branch(),
+                                                        (90 * sign) + branch_deviation(),
                                                         True,
                                                         True)
             new_segments.append(branch)
@@ -903,7 +671,7 @@ def global_goals(previous_segment: RoadSegment):
             sign = random.randrange(-1, 2, 2)
             delay = 5 if previous_segment.is_highway else 0
             branch = previous_segment.make_continuation(STREET_LENGTH,
-                                                        (90 * sign) + wiggle_branch(),
+                                                        (90 * sign) + branch_deviation(),
                                                         False,
                                                         True,
                                                         delay)
@@ -944,14 +712,14 @@ def local_constraints(inspect_seg, segments, sector_segments):
             # watch_local_cross.stop()
 
             # watch_local_vert.start()
-            if segment_length(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
+            if dist_vectors(line.end, inspect_seg.end) < SNAP_VERTEX_RADIUS and priority <= 3:
                 priority = 3
 
                 action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
             # watch_local_vert.stop()
 
             if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
-                if dist_points(inspect_seg.end, point_on_road(inspect_seg, inter[1])) < SNAP_EXTEND_RADIUS:
+                if dist_vectors(inspect_seg.end, inspect_seg.point_at(inter[1])) < SNAP_EXTEND_RADIUS:
                     last_ext_t = inter[1]
                     point = inter[0]
 
