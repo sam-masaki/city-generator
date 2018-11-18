@@ -24,11 +24,7 @@ def main():
     all_roads = result[0]
     sects = result[1]
 
-    path = []
-    path_searched = []
-    path_start = None
-    path_end = None
-    path_length = None
+    path_data = pathing.PathData()
 
     selection = None
 
@@ -97,19 +93,13 @@ def main():
 
                 # Pathing
                 elif event.key == pygame.K_z:
-                    path_start = select_nearby_road(mouse_world_pos, all_roads)
+                    path_data.start = select_nearby_road(mouse_world_pos, all_roads)
                 elif event.key == pygame.K_x:
-                    path_end = select_nearby_road(mouse_world_pos, all_roads)
+                    path_data.end = select_nearby_road(mouse_world_pos, all_roads)
                 elif event.key == pygame.K_c:
-                    path_data = pathing.astar(path_start, path_end, all_roads)
-                    path = path_data[0]
-                    path_searched = path_data[1]
-                    path_length = path_data[2]
+                    pathing.astar(path_data, all_roads)
                 elif event.key == pygame.K_v:
-                    path_data = pathing.dijkstra(path_start, path_end, all_roads)
-                    path = path_data[0]
-                    path_searched = path_data[1]
-                    path_length = path_data[2]
+                    pathing.dijkstra(path_data, all_roads)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Zooming
                 if event.button == 4:
@@ -170,7 +160,7 @@ def main():
                     if (x, y) in sects:
                         draw_all_roads(sects[(x, y)], screen, viewport_pos, zoom_level)
         draw_roads_selected(selection, screen, viewport_pos, zoom_level)
-        draw_roads_path(path, path_searched, path_start, path_end, screen, viewport_pos, zoom_level)
+        draw_roads_path(path_data.path, path_data.searched, path_data.start, path_data.end, screen, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
             debug_labels_left = []
@@ -196,8 +186,7 @@ def main():
                 debug_labels_left.append("    sectors: {}".format(str(selection[4])))
             else:
                 debug_labels_left.append("Selected: None")
-            if path_length is not None:
-                debug_labels_left.append("Path Length: {}".format(path_length))
+            debug_labels_left.append("Path Length: {}".format(path_data.length))
 
             debug_labels_right.append("Seed: {}".format(str(config.ROAD_SEED)))
 

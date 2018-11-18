@@ -3,8 +3,17 @@ from heapdict import heapdict
 import vectors
 
 
-def astar(start, end, all_roads):
-    closed = []
+class PathData:
+    def __init__(self):
+        self.path = []
+        self.searched = []
+        self.start = None
+        self.end = None
+        self.length = 0
+
+
+def astar(data: PathData, all_roads):
+    data.searched = []
     open = heapdict()
 
     dist_start = {}
@@ -15,60 +24,59 @@ def astar(start, end, all_roads):
         init_start = 9999999
         init_end = 9999999
 
-        if road is start:
+        if road is data.start:
             init_start = 0
-            init_end = heuristic(road, end)
+            init_end = heuristic(road, data.end)
 
         dist_start[road] = init_start
         dist_end[road] = init_end
         prev_road[road] = None
 
-    open[start] = dist_end[start]
+    open[data.start] = dist_end[data.start]
 
     while len(open):
         curr_min = open.popitem()[0]
-        if curr_min is end:
+        if curr_min is data.end:
             break
 
-        closed.append(curr_min)
+        data.searched.append(curr_min)
         neighbors = curr_min.links_s.union(curr_min.links_e)
 
         for road in neighbors:
-            if road in closed:
+            if road in data.searched:
                 continue
 
             new_dist_start = dist_start[curr_min] + cost(road)
 
             if new_dist_start < dist_start[road]:
                 dist_start[road] = new_dist_start
-                dist_end[road] = new_dist_start + heuristic(road, end)
+                dist_end[road] = new_dist_start + heuristic(road, data.end)
                 prev_road[road] = curr_min
                 if road not in open:
                     open[road] = dist_end[road]
 
-    sequence = []
-    length = retrace_path(prev_road, sequence, start, end)
+    data.path = []
+    data.length = retrace_path(prev_road, data)
+    return
 
-    return sequence, closed, length
 
-
-def dijkstra(start, end, all_roads):
+def dijkstra(data: PathData, all_roads):
     node_queue = heapdict()
 
     dist_start = {}
     prev_road = {}
 
-    searched = []
+    data.searched = []
 
     for road in all_roads:
-        dist_start[road] = 0 if road is start else 9999999
+        dist_start[road] = 0 if road is data.start else 9999999
         prev_road[road] = None
         node_queue[road] = dist_start[road]
 
     while not len(node_queue) == 0:
         curr_min = node_queue.popitem()[0]
 
-        if curr_min is end:
+        if curr_min is data.end:
             break
 
         neighbors = curr_min.links_s.union(curr_min.links_e)
@@ -76,24 +84,23 @@ def dijkstra(start, end, all_roads):
         for road in neighbors:
             this_dist = dist_start[curr_min] + cost(road)
             if this_dist < dist_start[road]:
-                searched.append(road)
+                data.searched.append(road)
 
                 dist_start[road] = this_dist
                 prev_road[road] = curr_min
                 node_queue[road] = this_dist
 
-    sequence = []
-    length = retrace_path(prev_road, sequence, start, end)
+    data.path = []
+    data.length = retrace_path(prev_road, data)
+    return
 
-    return sequence, searched, length
 
-
-def retrace_path(previous_node, sequence, start, end):
+def retrace_path(previous_node, data):
     length = 0
-    if previous_node[end] is not None or end is start:
-        curr_node = end
+    if previous_node[data.end] is not None or data.end is data.start:
+        curr_node = data.end
         while curr_node is not None:
-            sequence.append(curr_node)
+            data.path.append(curr_node)
             length += cost(curr_node)
             curr_node = previous_node[curr_node]
     return length
