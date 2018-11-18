@@ -21,7 +21,7 @@ def main():
     running = True
 
     result = generate()
-    roads = result[0]
+    all_roads = result[0]
     sects = result[1]
 
     path = []
@@ -39,14 +39,15 @@ def main():
     drag_start = None
     viewport_pos = (0, 0)
     prev_pressed = (False, False, False)
+    prev_time = pygame.time.get_ticks()
 
     gohu_font = pygame.font.SysFont("GohuFont", 11)
 
-    prev_time = pygame.time.get_ticks()
+
 
     road_labels = []
 
-    for road in roads:
+    for road in all_roads:
         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                             road.point_at(0.5)))
 
@@ -54,19 +55,22 @@ def main():
         if pygame.time.get_ticks() - prev_time < 16:
             continue
 
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_world_pos = screen_to_world(mouse_pos, viewport_pos, zoom_level)
         prev_time = pygame.time.get_ticks()
         screen.fill((0, 0, 0))
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     result = generate()
-                    roads = result[0]
+                    all_roads = result[0]
                     sects = result[1]
                     road_labels = []
 
-                    for road in roads:
+                    for road in all_roads:
                         road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
                                             road.point_at(0.5)))
                 # Debug Views
@@ -96,16 +100,16 @@ def main():
 
                 # Pathing
                 elif event.key == pygame.K_z:
-                    path_start = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
+                    path_start = select_nearby_road(mouse_world_pos, all_roads)
                 elif event.key == pygame.K_x:
-                    path_end = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
+                    path_end = select_nearby_road(mouse_world_pos, all_roads)
                 elif event.key == pygame.K_c:
-                    path_data = pathing.astar(path_start, path_end, roads)
+                    path_data = pathing.astar(path_start, path_end, all_roads)
                     path = path_data[0]
                     path_searched = path_data[1]
                     path_length = path_data[2]
                 elif event.key == pygame.K_v:
-                    path_data = pathing.dijkstra(path_start, path_end, roads)
+                    path_data = pathing.dijkstra(path_start, path_end, all_roads)
                     path = path_data[0]
                     path_searched = path_data[1]
                     path_length = path_data[2]
@@ -113,24 +117,25 @@ def main():
 
                 # Zooming
                 if event.button == 4:
-                    good_var_name = zoom_change(zoom_increment, 1, pygame.mouse.get_pos(), viewport_pos)
+                    good_var_name = zoom_change(zoom_increment, 1, mouse_pos, viewport_pos)
                     zoom_level = good_var_name[0]
                     viewport_pos = vectors.add(viewport_pos, good_var_name[1])
                     zoom_increment += 1
                 elif event.button == 5:
                     if zoom_increment > -11:
-                        good_var_name = zoom_change(zoom_increment, -1, pygame.mouse.get_pos(), viewport_pos)
+                        good_var_name = zoom_change(zoom_increment, -1, mouse_pos, viewport_pos)
                         zoom_level = good_var_name[0]
                         viewport_pos = vectors.add(viewport_pos, good_var_name[1])
                         zoom_increment -= 1
 
+        # Dragging
         if prev_pressed[0]:
             if pygame.mouse.get_pressed()[0]:
-                viewport_pos = vectors.add(viewport_pos, vectors.sub(pygame.mouse.get_pos(), prev_mouse))
-                prev_mouse = pygame.mouse.get_pos()
+                viewport_pos = vectors.add(viewport_pos, vectors.sub(mouse_pos, prev_mouse))
+                prev_mouse = mouse_pos
             else:
-                if pygame.mouse.get_pos() == drag_start:
-                    selected = select_nearby_road(screen_to_world(drag_start, viewport_pos, zoom_level), roads)
+                if mouse_pos == drag_start:
+                    selected = select_nearby_road(screen_to_world(drag_start, viewport_pos, zoom_level), all_roads)
                     if selected is not None:
                         start_ids = []
                         end_ids = []
@@ -149,18 +154,18 @@ def main():
                 drag_start = None
         else:
             if pygame.mouse.get_pressed()[0]:
-                drag_start = pygame.mouse.get_pos()
-                prev_mouse = pygame.mouse.get_pos()
+                drag_start = mouse_pos
+                prev_mouse = mouse_pos
         prev_pressed = pygame.mouse.get_pressed()
 
+        # Drawing
         if DEBUG_HEATMAP:
             draw_heatmap(screen, 50, viewport_pos, zoom_level)
-
         if DEBUG_SECTORS:
             draw_sectors(screen, viewport_pos, zoom_level)
-
         if DEBUG_ISOLATE_SECTOR and selection is not None:
-            draw_all_roads(sects[sectors.containing_sector(selection[0].point_at(0.5))], screen, viewport_pos, zoom_level)
+            draw_all_roads(sects[sectors.containing_sector(selection[0].point_at(0.5))],
+                           screen, viewport_pos, zoom_level)
         else:
             tl_sect = sectors.containing_sector(screen_to_world((0, 0), viewport_pos, zoom_level))
             br_sect = sectors.containing_sector(screen_to_world(SCREEN_RES, viewport_pos, zoom_level))
@@ -175,12 +180,10 @@ def main():
             debug_labels_left = []
             debug_labels_right = []
 
-            mouse_pos = pygame.mouse.get_pos()
-
             debug_labels_left.append("Pointer (screen): {}".format(str(mouse_pos)))
-            debug_labels_left.append("    (world): {}".format(screen_to_world(mouse_pos, viewport_pos, zoom_level)))
-            debug_labels_left.append("    pop_at: {}".format(population.at_point(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))))
-            debug_labels_left.append("    sec_at: {}".format(sectors.containing_sector(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level))))
+            debug_labels_left.append("    (world): {}".format(mouse_world_pos))
+            debug_labels_left.append("    pop_at: {}".format(population.at_point(mouse_world_pos)))
+            debug_labels_left.append("    sec_at: {}".format(sectors.containing_sector(mouse_world_pos)))
             debug_labels_left.append("Pan: {}".format(viewport_pos))
             debug_labels_left.append("Zoom: {}x".format(str(zoom_level)))
 
@@ -216,7 +219,6 @@ def main():
                 screen.blit(surf,
                             (SCREEN_RES[0] - surf.get_width() - 10, height))
                 height += 15
-
         if DEBUG_ROAD_ORDER:
             for label in road_labels:
                 label_pos = world_to_screen(label[1], viewport_pos, zoom_level)
@@ -226,7 +228,7 @@ def main():
         pygame.display.flip()
 
 
-def select_nearby_road(world_pos: Tuple[float, float], all_roads: List[roads.Segment]) -> roads.Segment:
+def select_nearby_road(world_pos: Tuple[float, float], all_roads: List[roads.Segment]):
     closest: Tuple[roads.Segment, float] = (None, 9999)
     for road in all_roads:
         dist = vectors.distance(world_pos, road.point_at(0.5))
@@ -252,8 +254,8 @@ def screen_to_world(screen_pos, pan, zoom):
     return result
 
 
-def draw_all_roads(roads, screen, pan, zoom):
-    for road in roads:
+def draw_all_roads(all_roads, screen, pan, zoom):
+    for road in all_roads:
         width = 2
         color = (255, 255, 255)
 
