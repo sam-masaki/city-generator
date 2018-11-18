@@ -17,30 +17,26 @@ from generation import generate
 def main():
     pygame.init()
     screen = pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE)
-
-    running = True
+    gohu_font = pygame.font.SysFont("GohuFont", 11)
 
     result = generate()
     all_roads = result[0]
-    sects = result[1]
+    all_sectors = result[1]
+    road_labels = []
 
     path_data = pathing.PathData()
-
     selection = None
 
+    # Inter-frame Variables
     zoom_level = 1
     zoom_increment = 0
-
     prev_mouse = (0, 0)
     drag_start = None
     viewport_pos = (0, 0)
     prev_pressed = (False, False, False)
     prev_time = pygame.time.get_ticks()
 
-    gohu_font = pygame.font.SysFont("GohuFont", 11)
-
-    road_labels = []
-
+    running = True
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
             continue
@@ -60,7 +56,7 @@ def main():
                 if event.key == pygame.K_g:
                     result = generate()
                     all_roads = result[0]
-                    sects = result[1]
+                    all_sectors = result[1]
                 # Debug Views
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
@@ -126,14 +122,14 @@ def main():
                         start_ids = []
                         end_ids = []
                         connections = []
-                        all_sectors = sectors.from_seg(selected)
+                        selected_sectors = sectors.from_seg(selected)
                         for road in selected.links_s:
                             start_ids.append(road.global_id)
                             connections.append(road)
                         for road in selected.links_e:
                             end_ids.append(road.global_id)
                             connections.append(road)
-                        selection = (selected, connections, start_ids, end_ids, all_sectors)
+                        selection = (selected, connections, start_ids, end_ids, selected_sectors)
                     else:
                         selection = None
 
@@ -150,17 +146,17 @@ def main():
         if DEBUG_SECTORS:
             draw_sectors(screen, viewport_pos, zoom_level)
         if DEBUG_ISOLATE_SECTOR and selection is not None:
-            draw_all_roads(sects[sectors.containing_sector(selection[0].point_at(0.5))],
+            draw_all_roads(all_sectors[sectors.containing_sector(selection[0].point_at(0.5))],
                            screen, viewport_pos, zoom_level)
         else:
             tl_sect = sectors.containing_sector(screen_to_world((0, 0), viewport_pos, zoom_level))
             br_sect = sectors.containing_sector(screen_to_world(config.SCREEN_RES, viewport_pos, zoom_level))
             for x in range(tl_sect[0], br_sect[0] + 1):
                 for y in range(tl_sect[1], br_sect[1] + 1):
-                    if (x, y) in sects:
-                        draw_all_roads(sects[(x, y)], screen, viewport_pos, zoom_level)
+                    if (x, y) in all_sectors:
+                        draw_all_roads(all_sectors[(x, y)], screen, viewport_pos, zoom_level)
         draw_roads_selected(selection, screen, viewport_pos, zoom_level)
-        draw_roads_path(path_data.path, path_data.searched, path_data.start, path_data.end, screen, viewport_pos, zoom_level)
+        draw_roads_path(path_data, screen, viewport_pos, zoom_level)
 
         if DEBUG_INFO:
             debug_labels_left = []
@@ -241,11 +237,11 @@ def screen_to_world(screen_pos, pan, zoom):
 
 def draw_all_roads(all_roads, screen, pan, zoom):
     for road in all_roads:
-        width = 2
+        width = config.ROAD_WIDTH
         color = (255, 255, 255)
 
         if road.is_highway:
-            width = 4
+            width = config.ROAD_WIDTH_HIGHWAY
             color = (255, 0, 0)
         elif DEBUG_ROAD_VIEW == DebugRoadViews.Snaps:
             if road.has_snapped == SnapType.Cross:
@@ -267,31 +263,31 @@ def draw_all_roads(all_roads, screen, pan, zoom):
 
 def draw_roads_selected(selection, screen, pan, zoom):
     if selection is not None:
-        draw_road(selection[0], (255, 255, 0), 8, screen, pan, zoom)
+        draw_road(selection[0], (255, 255, 0), config.ROAD_WIDTH_SELECTION, screen, pan, zoom)
 
         for road in selection[1]:
-            draw_road(road, (0, 255, 0), 6, screen, pan, zoom)
+            draw_road(road, (0, 255, 0), config.ROAD_WIDTH_SELECTION, screen, pan, zoom)
 
 
-def draw_roads_path(path, searched, start, end, screen, pan, zoom):
-    if len(searched) != 0:
-        width = 5
+def draw_roads_path(path_data: pathing.PathData, screen, pan, zoom):
+    if len(path_data.searched) != 0:
+        width = config.ROAD_WIDTH_PATH
         color = (255, 0, 255)
 
-        for road in searched:
+        for road in path_data.searched:
             draw_road(road, color, width, screen, pan, zoom)
 
-    if len(path) != 0:
-        width = 7
+    if len(path_data.path) != 0:
+        width = config.ROAD_WIDTH_PATH
         color = (0, 255, 255)
-        for road in path:
+        for road in path_data.path:
             draw_road(road, color, width, screen, pan, zoom)
 
-    width = 8
-    if start is not None:
-        draw_road(start, (0, 255, 0), width, screen, pan, zoom)
-    if end is not None:
-        draw_road(end, (255, 0, 0), width, screen, pan, zoom)
+    width = config.ROAD_WIDTH_PATH
+    if path_data.start is not None:
+        draw_road(path_data.start, (0, 255, 0), width, screen, pan, zoom)
+    if path_data.end is not None:
+        draw_road(path_data.end, (255, 0, 0), width, screen, pan, zoom)
 
 
 def draw_road(road, color, width, screen, pan, zoom):
