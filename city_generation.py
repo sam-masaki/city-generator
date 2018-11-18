@@ -1,53 +1,34 @@
-import pygame
-import heapq
-import math
 import random
 import time
+from typing import List, Tuple
+
+import pygame
 from heapdict import heapdict
 from noise import snoise2
-import enum
-from config import *
-from RoadSegment import *
-from Stopwatch import Stopwatch
+
+from roads import RoadSegment, RoadQueue
 from SnapType import SnapType
-
+from Stopwatch import Stopwatch
+from config import *
+from debug import *
 from vector_operations import *
-from typing import List, Tuple, Optional
-
-
-class DebugRoadViews(enum.Enum):
-    No = enum.auto()
-    Snaps = enum.auto()
-    Branches = enum.auto()
-
-
-DEBUG_INFO = True
-DEBUG_ROAD_VIEW = DebugRoadViews.No
-DEBUG_ROAD_ORDER = False
-DEBUG_HEATMAP = False
-DEBUG_SECTORS = False
-DEBUG_ISOLATE_SECTOR = False
-
-DEBUG_NEW_FEATURE = False
-
-NOISE_SEED = (0, 0)
 
 seed = time.process_time()
 random.seed(seed)
 
 
-class RoadQueue:
-    def __init__(self):
-        self.heap = []
+def select_nearby_road(world_pos: Tuple[float, float], roads: List[RoadSegment]) -> RoadSegment:
+    closest: Tuple[RoadSegment, float] = (None, 9999)
+    for road in roads:
+        dist = dist_vectors(world_pos, road.point_at(0.5))
+        if dist < closest[1]:
+            closest = (road, dist)
+    if closest[1] < 100:
+        selected = closest[0]
 
-    def push(self, segment):
-        heapq.heappush(self.heap, segment)
+        return selected
 
-    def pop(self):
-        return heapq.heappop(self.heap)
-
-    def is_empty(self):
-        return self.heap == []
+    return None
 
 
 def world_to_screen(world_pos, pan, zoom):
@@ -120,20 +101,6 @@ def draw_roads_path(path, searched, start, end, screen, pan, zoom):
 def draw_road(road, color, width, screen, pan, zoom):
     pygame.draw.line(screen, color, world_to_screen(road.start, pan, zoom),
                      world_to_screen(road.end, pan, zoom), width)
-
-
-def select_nearby_road(world_pos: Tuple[float, float], roads: List[RoadSegment]) -> RoadSegment:
-    closest: Tuple[RoadSegment, float] = (None, 9999)
-    for road in roads:
-        dist = dist_vectors(world_pos, road.point_at(0.5))
-        if dist < closest[1]:
-            closest = (road, dist)
-    if closest[1] < 100:
-        selected = closest[0]
-
-        return selected
-
-    return None
 
 
 def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):

@@ -1,6 +1,20 @@
+import heapq
 from SnapType import SnapType
-import math
 from vector_operations import *
+
+
+class RoadQueue:
+    def __init__(self):
+        self.heap = []
+
+    def push(self, segment):
+        heapq.heappush(self.heap, segment)
+
+    def pop(self):
+        return heapq.heappop(self.heap)
+
+    def is_empty(self):
+        return self.heap == []
 
 
 class RoadSegment:
