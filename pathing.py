@@ -47,13 +47,9 @@ def astar(start, end, all_roads):
                     open[road] = dist_end[road]
 
     sequence = []
-    if prev_road[end] is not None or end is start:
-        curr_node = end
-        while curr_node is not None:
-            sequence.append(curr_node)
-            curr_node = prev_road[curr_node]
+    length = retrace_path(prev_road, sequence, start, end)
 
-    return sequence, closed
+    return sequence, closed, length
 
 
 def dijkstra(start, end, all_roads):
@@ -87,13 +83,20 @@ def dijkstra(start, end, all_roads):
                 node_queue[road] = this_dist
 
     sequence = []
-    if prev_road[end] is not None or end is start:
+    length = retrace_path(prev_road, sequence, start, end)
+
+    return sequence, searched, length
+
+
+def retrace_path(previous_node, sequence, start, end):
+    length = 0
+    if previous_node[end] is not None or end is start:
         curr_node = end
         while curr_node is not None:
             sequence.append(curr_node)
-            curr_node = prev_road[curr_node]
-
-    return sequence, searched
+            length += cost(curr_node)
+            curr_node = previous_node[curr_node]
+    return length
 
 
 def heuristic(road, goal):

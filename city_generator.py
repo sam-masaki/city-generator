@@ -28,6 +28,7 @@ def main():
     path_searched = []
     path_start = None
     path_end = None
+    path_length = None
 
     selection = None
 
@@ -99,9 +100,15 @@ def main():
                 elif event.key == pygame.K_x:
                     path_end = select_nearby_road(screen_to_world(pygame.mouse.get_pos(), viewport_pos, zoom_level), roads)
                 elif event.key == pygame.K_c:
+                    path_data = pathing.astar(path_start, path_end, roads)
+                    path = path_data[0]
+                    path_searched = path_data[1]
+                    path_length = path_data[2]
+                elif event.key == pygame.K_v:
                     path_data = pathing.dijkstra(path_start, path_end, roads)
                     path = path_data[0]
                     path_searched = path_data[1]
+                    path_length = path_data[2]
             elif event.type == pygame.MOUSEBUTTONDOWN:
 
                 # Zooming
@@ -190,6 +197,8 @@ def main():
                 debug_labels_left.append("    sectors: {}".format(str(selection[4])))
             else:
                 debug_labels_left.append("Selected: None")
+            if path_length is not None:
+                debug_labels_left.append("Path Length: {}".format(path_length))
 
             debug_labels_right.append("Seed: {}".format(str(ROAD_SEED)))
 
@@ -217,9 +226,9 @@ def main():
         pygame.display.flip()
 
 
-def select_nearby_road(world_pos: Tuple[float, float], roads: List[roads.Segment]) -> roads.Segment:
+def select_nearby_road(world_pos: Tuple[float, float], all_roads: List[roads.Segment]) -> roads.Segment:
     closest: Tuple[roads.Segment, float] = (None, 9999)
-    for road in roads:
+    for road in all_roads:
         dist = vectors.distance(world_pos, road.point_at(0.5))
         if dist < closest[1]:
             closest = (road, dist)
