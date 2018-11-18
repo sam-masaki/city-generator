@@ -9,14 +9,14 @@ import roads
 import sectors
 import vectors
 from SnapType import SnapType
-from config import *
+import config
 from debug import *
 from generation import generate
 
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode(SCREEN_RES)
+    screen = pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE)
 
     running = True
 
@@ -43,13 +43,7 @@ def main():
 
     gohu_font = pygame.font.SysFont("GohuFont", 11)
 
-
-
     road_labels = []
-
-    for road in all_roads:
-        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                            road.point_at(0.5)))
 
     while running:
         if pygame.time.get_ticks() - prev_time < 16:
@@ -63,16 +57,15 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode(event.dict["size"], pygame.RESIZABLE)
+                config.SCREEN_RES = event.dict["size"]
+                print(config.SCREEN_RES)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
                     result = generate()
                     all_roads = result[0]
                     sects = result[1]
-                    road_labels = []
-
-                    for road in all_roads:
-                        road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
-                                            road.point_at(0.5)))
                 # Debug Views
                 elif event.key == pygame.K_1:
                     global DEBUG_INFO
@@ -88,6 +81,11 @@ def main():
                 elif event.key == pygame.K_3:
                     global DEBUG_ROAD_ORDER
                     DEBUG_ROAD_ORDER = not DEBUG_ROAD_ORDER
+                    if DEBUG_ROAD_ORDER:
+                        road_labels = []
+                        for road in all_roads:
+                            road_labels.append((gohu_font.render(str(road.global_id), True, (255, 255, 255)),
+                                                road.point_at(0.5)))
                 elif event.key == pygame.K_4:
                     global DEBUG_HEATMAP
                     DEBUG_HEATMAP = not DEBUG_HEATMAP
@@ -114,7 +112,6 @@ def main():
                     path_searched = path_data[1]
                     path_length = path_data[2]
             elif event.type == pygame.MOUSEBUTTONDOWN:
-
                 # Zooming
                 if event.button == 4:
                     good_var_name = zoom_change(zoom_increment, 1, mouse_pos, viewport_pos)
@@ -168,7 +165,7 @@ def main():
                            screen, viewport_pos, zoom_level)
         else:
             tl_sect = sectors.containing_sector(screen_to_world((0, 0), viewport_pos, zoom_level))
-            br_sect = sectors.containing_sector(screen_to_world(SCREEN_RES, viewport_pos, zoom_level))
+            br_sect = sectors.containing_sector(screen_to_world(config.SCREEN_RES, viewport_pos, zoom_level))
             for x in range(tl_sect[0], br_sect[0] + 1):
                 for y in range(tl_sect[1], br_sect[1] + 1):
                     if (x, y) in sects:
@@ -203,9 +200,9 @@ def main():
             if path_length is not None:
                 debug_labels_left.append("Path Length: {}".format(path_length))
 
-            debug_labels_right.append("Seed: {}".format(str(ROAD_SEED)))
+            debug_labels_right.append("Seed: {}".format(str(config.ROAD_SEED)))
 
-            debug_labels_right.append("# of segments: {}".format(str(MAX_SEGS)))
+            debug_labels_right.append("# of segments: {}".format(str(config.MAX_SEGS)))
 
             height = 10
             for label in debug_labels_left:
@@ -217,12 +214,12 @@ def main():
             for label in debug_labels_right:
                 surf = gohu_font.render(label, False, (255, 255, 255))
                 screen.blit(surf,
-                            (SCREEN_RES[0] - surf.get_width() - 10, height))
+                            (config.SCREEN_RES[0] - surf.get_width() - 10, height))
                 height += 15
         if DEBUG_ROAD_ORDER:
             for label in road_labels:
                 label_pos = world_to_screen(label[1], viewport_pos, zoom_level)
-                if -20 < label_pos[0] < SCREEN_RES[0] and -20 < label_pos[1] < SCREEN_RES[1]:
+                if -20 < label_pos[0] < config.SCREEN_RES[0] and -20 < label_pos[1] < config.SCREEN_RES[1]:
                     screen.blit(label[0], label_pos)
 
         pygame.display.flip()
@@ -334,21 +331,21 @@ def draw_heatmap(screen: pygame.Surface, square_size, pan, zoom):
 
 
 def draw_sectors(screen: pygame.Surface, pan, zoom):
-    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // SECTOR_SIZE) + 1
-    x_max = round(screen_to_world((SCREEN_RES[0], 0), pan, zoom)[0] // SECTOR_SIZE) + 1
+    x_min = round(screen_to_world((0, 0), pan, zoom)[0] // config.SECTOR_SIZE) + 1
+    x_max = round(screen_to_world((config.SCREEN_RES[0], 0), pan, zoom)[0] // config.SECTOR_SIZE) + 1
 
     x_range = range(x_min, x_max)
     for x in x_range:
-        pos_x = world_to_screen((SECTOR_SIZE * x, 0), pan, zoom)[0]
-        pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, SCREEN_RES[1]))
+        pos_x = world_to_screen((config.SECTOR_SIZE * x, 0), pan, zoom)[0]
+        pygame.draw.line(screen, (200, 200, 200), (pos_x, 0), (pos_x, config.SCREEN_RES[1]))
 
-    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // SECTOR_SIZE) + 1
-    y_max = round(screen_to_world((0, SCREEN_RES[1]), pan, zoom)[1] // SECTOR_SIZE) + 1
+    y_min = round(screen_to_world((0, 0), pan, zoom)[1] // config.SECTOR_SIZE) + 1
+    y_max = round(screen_to_world((0, config.SCREEN_RES[1]), pan, zoom)[1] // config.SECTOR_SIZE) + 1
 
     y_range = range(y_min, y_max)
     for y in y_range:
-        pos_y = world_to_screen((0, SECTOR_SIZE * y), pan, zoom)[1]
-        pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (SCREEN_RES[0], pos_y))
+        pos_y = world_to_screen((0, config.SECTOR_SIZE * y), pan, zoom)[1]
+        pygame.draw.line(screen, (200, 200, 200), (0, pos_y), (config.SCREEN_RES[0], pos_y))
 
 
 def zoom_change(prev, increment, center, pan):
