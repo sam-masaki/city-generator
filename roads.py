@@ -1,9 +1,10 @@
 import heapq
 from SnapType import SnapType
-from vector_operations import *
+import vectors
+import math
 
 
-class RoadQueue:
+class Queue:
     def __init__(self):
         self.heap = []
 
@@ -17,7 +18,7 @@ class RoadQueue:
         return self.heap == []
 
 
-class RoadSegment:
+class Segment:
     seg_id = 0
 
     def __init__(self, start, end, is_highway, time_delay=0):
@@ -34,13 +35,13 @@ class RoadSegment:
         self.settled = False
 
         self.insertion_order = 0
-        self.global_id = RoadSegment.seg_id
+        self.global_id = Segment.seg_id
 
         self.pathing_dist_start = 9999999
         self.pathing_dist_end = 9999999
         self.pathing_prev = None
 
-        RoadSegment.seg_id += 1
+        Segment.seg_id += 1
 
     def __lt__(self, other):
         return self.t < other.t
@@ -49,7 +50,7 @@ class RoadSegment:
         return self.t > other.t
 
     def copy(self):
-        return RoadSegment(self.start, self.end, self.is_highway, self.t)
+        return Segment(self.start, self.end, self.is_highway, self.t)
 
     def make_continuation(self, length, offset, is_highway, is_branch, delay=0):
         radian_dir = math.radians(self.dir() + offset)
@@ -57,13 +58,13 @@ class RoadSegment:
         end_x = self.end[0] + (length * math.cos(radian_dir))
         end_y = self.end[1] + (length * math.sin(radian_dir))
 
-        road = RoadSegment(self.end, (end_x, end_y), is_highway, delay)
+        road = Segment(self.end, (end_x, end_y), is_highway, delay)
         road.is_branch = is_branch
 
         return road
 
     def length(self):
-        return dist_vectors(self.start, self.end)
+        return vectors.distance(self.start, self.end)
 
     def dir(self):
         angle = math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
@@ -122,8 +123,26 @@ class RoadSegment:
         return round(self.length() * multiplier * 0.1)
 
     def pathing_heuristic(self, goal):
-        return dist_vectors(self.point_at(0.5), goal.point_at(0.5)) * 0.1
+        return vectors.distance(self.point_at(0.5), goal.point_at(0.5)) * 0.1
 
     def point_at(self, factor):
-        end_vector = sub_vectors(self.end, self.start)
+        end_vector = vectors.sub(self.end, self.start)
         return self.start[0] + (factor * end_vector[0]), self.start[1] + (factor * end_vector[1])
+
+    def find_intersect(self, other):
+        r = vectors.sub(self.end, self.start)
+        s = vectors.sub(other.end, other.start)
+
+        u_numerator = vectors.cross_product(vectors.sub(other.start, self.start), r)
+        t_numerator = vectors.cross_product(vectors.sub(other.start, self.start), s)
+        denominator = vectors.cross_product(r, s)
+
+        if denominator == 0:
+            return None
+        u = u_numerator / denominator
+        t = t_numerator / denominator
+
+        if 0 < u < 1:
+            return (self.start[0] + (t * r[0]), self.start[1] + (t * r[1])), t, u
+
+        return None
