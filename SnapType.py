@@ -1,12 +1,13 @@
-import enum
+from enum import IntEnum, auto
 
 
-class SnapType(enum.Enum):
-    No = 0
-    Cross = 1
-    End = 2
-    Extend = 3
-    CrossTooClose = 4
-    Split = 5
-    DebugDeleted = 6
-    Shorten = 7
+class SnapType(IntEnum):
+    No = auto()
+    Extend = auto()
+    End = auto()
+    Cross = auto()
+
+    CrossTooClose = auto()
+    Split = auto()
+    DebugDeleted = auto()
+    Shorten = auto()

@@ -121,7 +121,6 @@ def global_goals(previous_segment: roads.Segment):
 def local_constraints(inspect_seg, segments, sector_segments):
     # watch_local.start()
 
-    priority = 0
     action = None
     last_inter_t = 1
     last_ext_t = 999
@@ -131,6 +130,8 @@ def local_constraints(inspect_seg, segments, sector_segments):
         return False
     # watch_local_overlap.stop()
 
+    last_snap = SnapType.No
+
     road_sectors = sectors.from_seg(inspect_seg)
     for sec in road_sectors:
         if sec not in sector_segments:
@@ -138,28 +139,27 @@ def local_constraints(inspect_seg, segments, sector_segments):
         for line in sector_segments[sec]:
             # watch_local_cross.start()
             inter = inspect_seg.find_intersect(line)
-            if inter is not None and 0 < inter[1] < last_inter_t and priority <= 4:
+            if inter is not None and 0 < inter[1] < last_inter_t and last_snap <= SnapType.Cross:
                 last_inter_t = inter[1]
-                priority = 4
+                last_snap = SnapType.Cross
 
                 action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
                 # ????consider finding nearby roads and delete if too similar
             # watch_local_cross.stop()
 
             # watch_local_vert.start()
-            if vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS and priority <= 3:
-                priority = 3
+            if vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS and last_snap <= SnapType.End:
 
                 action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
             # watch_local_vert.stop()
 
-            if inter is not None and 1 < inter[1] < last_ext_t and priority <= 2:
+            if inter is not None and 1 < inter[1] < last_ext_t and last_snap <= SnapType.Extend:
                 if vectors.distance(inspect_seg.end, inspect_seg.point_at(inter[1])) < config.SNAP_EXTEND_RADIUS:
                     last_ext_t = inter[1]
                     point = inter[0]
 
                     action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
-                    priority = 2
+                    last_snap = SnapType.Extend
 
     # watch_local.stop()
 
@@ -188,22 +188,21 @@ def check_overlap(inspect_seg):
     return True
 
 
-def snap_to_cross(mod_road, all_segments, sector_segments, other_road: roads.Segment, crossing, is_extend):
+def snap_to_cross(mod_road: roads.Segment, all_segments, sector_segments, other_road: roads.Segment, crossing, is_extend):
     aa = angle_between(mod_road.dir(), other_road.dir())
     angle_diff = min(aa, math.fabs(aa - 180))
     if angle_diff < config.MIN_ANGLE_DIFF:
         return False
 
-    # @FIX Crossings that are really close to existing intersections shouldn't happen; in that case, snap_to_end should
-    # take precedence unless doing so causes a new intersection, then it should go back to intersecting. The main issue
-    # is how to do that without wasting a ton of calculations, since this seems to happen a fair amount (at least the
-    # crossing is too close part). Dividing the full list of segments into sectors could make that recalculation be ok
+    # Fail if the crossing would produce a really short road
     if crossing[1] < 0.05:
         return False
     if crossing[2] < 0.05:
-        return snap_to_vert(mod_road, other_road, False, True)
-    if crossing[2] > 0.95:
-        return snap_to_vert(mod_road, other_road, True, True)
+        return False
+        #return snap_to_vert(mod_road, other_road, False, True)
+    if crossing[2] > 0.99:
+        return False
+        #return snap_to_vert(mod_road, other_road, True, True)
     else:
         start_links = other_road.links_s
         start_loc = other_road.start
