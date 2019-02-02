@@ -18,41 +18,42 @@ def generate(manual_seed=None):
     watch_total.start()
 
     roads.Segment.seg_id = 0
-    global ROAD_SEED
-    if manual_seed is None:
-        ROAD_SEED = time.process_time()
+    if manual_seed is not None:
+        seed = manual_seed
+    elif config.ROAD_SEED != 0:
+        seed = config.ROAD_SEED
     else:
-        ROAD_SEED = manual_seed
-    print("Generating {} segments with seed: {}".format(config.MAX_SEGS, ROAD_SEED))
-    random.seed(ROAD_SEED)
+        seed = time.process_time()
+    print("Generating {} segments with seed: {}".format(config.MAX_SEGS, seed))
+    random.seed(seed)
 
     road_queue = roads.Queue()
     road_queue.push(roads.Segment((0, 0), (config.HIGHWAY_LENGTH, 0), True))
 
-    segments = []
-    sector_segments = {}
+    road_segments = []
+    road_sectors = {}
 
     loop_count = 0
-    while not road_queue.is_empty() and len(segments) <= config.MAX_SEGS:
+    while not road_queue.is_empty() and len(road_segments) <= config.MAX_SEGS:
         seg = road_queue.pop()
 
-        if local_constraints(seg, segments, sector_segments):
+        if local_constraints(seg, road_segments, road_sectors):
             seg.insertion_order = loop_count
             seg.connect_links()
-            segments.append(seg)
-            sectors.add(seg, sector_segments)
+            road_segments.append(seg)
+            sectors.add(seg, road_sectors)
 
             new_segments = global_goals(seg)
 
             for new_seg in new_segments:
-                new_seg.t = seg.t + 1 + new_seg.t
+                new_seg.t += seg.t + 1
                 road_queue.push(new_seg)
         loop_count += 1
 
     watch_total.stop()
     print("Time spent (ms): {}".format(watch_total.passed_ms()))
 
-    return segments, sector_segments
+    return road_segments, road_sectors
 
 
 def highway_deviation():
@@ -69,17 +70,11 @@ def global_goals(previous_segment: roads.Segment):
     if previous_segment.has_snapped != SnapType.No:
         return new_segments
 
-    straight_seg = previous_segment.make_continuation(previous_segment.length(),
-                                                      0,
-                                                      previous_segment.is_highway,
-                                                      False)
+    straight_seg = previous_segment.make_extension(0)
     straight_pop = population.at_line(straight_seg)
 
     if previous_segment.is_highway:
-        wiggle_seg = previous_segment.make_continuation(config.HIGHWAY_LENGTH,
-                                                        highway_deviation(),
-                                                        True,
-                                                        False)
+        wiggle_seg = previous_segment.make_extension(highway_deviation())
         wiggle_pop = population.at_line(wiggle_seg)
 
         if wiggle_pop > straight_pop:
@@ -122,69 +117,54 @@ def local_constraints(inspect_seg, segments, sector_segments):
     # watch_local.start()
 
     action = None
+    last_snap = SnapType.No
     last_inter_t = 1
     last_ext_t = 999
 
-    # watch_local_overlap.start()
-    if not check_overlap(inspect_seg):
-        return False
-    # watch_local_overlap.stop()
-
-    last_snap = SnapType.No
+    if inspect_seg.parent is not None:
+        if not check_angle_diff(inspect_seg, inspect_seg.start, inspect_seg.parent.links_e):
+            return False
 
     road_sectors = sectors.from_seg(inspect_seg)
     for sec in road_sectors:
         if sec not in sector_segments:
             continue
         for line in sector_segments[sec]:
-            # watch_local_cross.start()
             inter = inspect_seg.find_intersect(line)
-            if inter is not None and 0 < inter[1] < last_inter_t and last_snap <= SnapType.Cross:
+            if last_snap <= SnapType.Cross and inter is not None and 0 < inter[1] < last_inter_t:
                 last_inter_t = inter[1]
                 last_snap = SnapType.Cross
 
                 action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
-                # ????consider finding nearby roads and delete if too similar
-            # watch_local_cross.stop()
 
-            # watch_local_vert.start()
-            if vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS and last_snap <= SnapType.End:
+            if last_snap <= SnapType.End and vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS:
 
                 action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
-            # watch_local_vert.stop()
 
-            if inter is not None and 1 < inter[1] < last_ext_t and last_snap <= SnapType.Extend:
+            if last_snap <= SnapType.Extend and inter is not None and 1 < inter[1] < last_ext_t:
                 if vectors.distance(inspect_seg.end, inspect_seg.point_at(inter[1])) < config.SNAP_EXTEND_RADIUS:
                     last_ext_t = inter[1]
-                    point = inter[0]
 
                     action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
                     last_snap = SnapType.Extend
-
-    # watch_local.stop()
-
+                    
     if action is not None:
         return action(None)
     return True
 
+def check_angle_diff(inspect_seg, linking_point, to_check):
+    for road in to_check:
+        if road is not inspect_seg:
+            if road.start == linking_point:
+                angle = road.dir()
+            elif road.end == linking_point:
+                angle = road.dir() - 180
+                if angle < 0:
+                    angle += 360
 
-def check_overlap(inspect_seg):
-    # This part doesn't have false positives, but it does miss some lines it should catch
-    if inspect_seg.parent is not None:
-        for road in inspect_seg.parent.links_e:
-            if road is not inspect_seg:
-                if road.start == inspect_seg.start:
-                    angle = road.dir()
-                elif road.end == inspect_seg.start:
-                    angle = road.dir() - 180
-                    if angle < 0:
-                        angle += 360
-                else: # I think this is ok in this case, because inspect_seg hasn't been settled yet, so you don't know if its links are actually solid
-                    continue
+            if angle_between(inspect_seg.dir(), angle) < config.MIN_ANGLE_DIFF:
+                return False
 
-                if angle_between(inspect_seg.dir(), angle) < config.MIN_ANGLE_DIFF:
-                    #inspect_seg.has_snapped = SnapType.DebugDeleted
-                    return False
     return True
 
 
@@ -195,51 +175,52 @@ def snap_to_cross(mod_road: roads.Segment, all_segments, sector_segments, other_
         return False
 
     # Fail if the crossing would produce a really short road
-    if crossing[1] < 0.05:
+    if round(crossing[1], 5) == 0:
         return False
-    if crossing[2] < 0.05:
+    if round(crossing[1], 5) == 1:
+        if round(crossing[2], 5) == 0 or round(crossing[2], 5) == 1:
+            return snap_to_vert(mod_road, other_road, round(crossing[2], 5) == 1, True)
+    if round(crossing[2], 5) == 0 or round(crossing[2], 5) == 1:
         return False
-        #return snap_to_vert(mod_road, other_road, False, True)
-    if crossing[2] > 0.99:
-        return False
-        #return snap_to_vert(mod_road, other_road, True, True)
+
+    start_loc = other_road.start
+    old_parent = other_road.parent
+
+    if old_parent is not None:
+        old_parent.links_e.remove(other_road)
+        for road in old_parent.links_e:
+            if road.start == old_parent.end:
+                if other_road not in road.links_s:
+                    print(other_road.global_id)
+                    print(road.global_id)
+                road.links_s.remove(other_road)
+            elif road.end == old_parent.end:
+                road.links_e.remove(other_road)
+
+    other_road.links_s = set()
+    other_road.start = crossing[0]
+
+    split_half = roads.Segment(start_loc, crossing[0], other_road.is_highway)
+    split_half.parent = old_parent
+    split_half.links_e.add(other_road)
+    split_half.connect_links()
+    split_half.is_branch = other_road.is_branch
+
+    other_road.is_branch = False
+    other_road.parent = split_half
+    other_road.links_s.add(split_half)
+
+    all_segments.append(split_half)
+    sectors.add(split_half, sector_segments)
+
+    mod_road.links_e.add(other_road)
+    mod_road.links_e.add(split_half)
+    mod_road.end = crossing[0]
+
+    if is_extend:
+        mod_road.has_snapped = SnapType.Extend
     else:
-        start_links = other_road.links_s
-        start_loc = other_road.start
-        old_parent = other_road.parent
-
-        other_road.links_s = set()
-        other_road.start = crossing[0]
-
-        if old_parent is not None:
-            old_parent.links_e.remove(other_road)
-            for road in old_parent.links_e:
-                if road.start == old_parent.end:
-                    road.links_s.remove(other_road)
-                elif road.end == old_parent.end:
-                    road.links_e.remove(other_road)
-
-        split_half = roads.Segment(start_loc, crossing[0], other_road.is_highway)
-        split_half.parent = old_parent
-        split_half.links_e.add(other_road)
-        split_half.connect_links()
-        split_half.is_branch = other_road.is_branch
-
-        other_road.is_branch = False
-        other_road.parent = split_half
-        other_road.links_s.add(split_half)
-
-        all_segments.append(split_half)
-        sectors.add(split_half, sector_segments)
-
-        mod_road.links_e.add(other_road)
-        mod_road.links_e.add(split_half)
-        mod_road.end = crossing[0]
-
-        if is_extend:
-            mod_road.has_snapped = SnapType.Extend
-        else:
-            mod_road.has_snapped = SnapType.Cross
+        mod_road.has_snapped = SnapType.Cross
     return True
 
 
@@ -258,16 +239,8 @@ def snap_to_vert(mod_road, other_road, end, too_close):
     if angle_between(mod_road.dir(), other_angle) < config.MIN_ANGLE_DIFF:
         return False
 
-    for road in examine_links:
-        if road.end == linking_point:
-            angle = road.dir()
-        elif road.start == linking_point:
-            angle = road.dir() - 180
-            if angle < 0:
-                angle += 360
-
-        if angle_between(mod_road.dir(), angle) < config.MIN_ANGLE_DIFF:
-            return False
+    if not check_angle_diff(mod_road, linking_point, examine_links):
+        return False
 
     mod_road.end = linking_point
 

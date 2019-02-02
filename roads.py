@@ -59,6 +59,9 @@ class Segment:
 
         return road
 
+    def make_extension(self, deviation):
+        return self.make_continuation(self.length(), deviation, self.is_highway, False)
+
     def length(self):
         return vectors.distance(self.start, self.end)
 
@@ -68,6 +71,7 @@ class Segment:
             angle += 360
         return angle
 
+    # links this road with every road that this is connected with and sets settled to true
     def connect_links(self):
         if self.parent is not None:
             for road in self.parent.links_e:
@@ -75,24 +79,16 @@ class Segment:
                     road.links_e.add(self)
                 elif self.start == road.start:
                     road.links_s.add(self)
-                else:
-                    print("AAAAAAAAAAAAAAA")
 
                 self.links_s.add(road)
             self.parent.links_e.add(self)
             self.links_s.add(self.parent)
 
         for road in self.links_e:
-            if not road.settled:
-                print("Should this happen?")
-                continue
-
             if self.end == road.start:
                 road.links_s.add(self)
             elif self.end == road.end:
                 road.links_e.add(self)
-            else:
-                print("OSEANOEMANOMEANOMANOEAMSOENAOMSAOENA")
 
         self.settled = True
 
