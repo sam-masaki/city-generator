@@ -2,7 +2,9 @@ import heapq
 from SnapType import SnapType
 import vectors
 import math
+import collections
 
+Intersection = collections.namedtuple("Intersection", ["point", "main_factor", "other_factor"])
 
 class Queue:
     def __init__(self):
@@ -100,16 +102,35 @@ class Segment:
         r = vectors.sub(self.end, self.start)
         s = vectors.sub(other.end, other.start)
 
-        u_numerator = vectors.cross_product(vectors.sub(other.start, self.start), r)
         t_numerator = vectors.cross_product(vectors.sub(other.start, self.start), s)
+        u_numerator = vectors.cross_product(vectors.sub(other.start, self.start), r)
         denominator = vectors.cross_product(r, s)
 
         if denominator == 0:
             return None
-        u = u_numerator / denominator
-        t = t_numerator / denominator
+        this_factor = t_numerator / denominator
+        other_factor = u_numerator / denominator
 
-        if 0 < u < 1:
-            return (self.start[0] + (t * r[0]), self.start[1] + (t * r[1])), t, u
+
+        if 0 < other_factor < 1:
+            return Intersection((self.start[0] + (this_factor * r[0]), self.start[1] + (this_factor * r[1])),
+                                this_factor,
+                                other_factor)
 
         return None
+
+# Gets the angle formed by two roads
+# Assumes the roads are connected and not the same
+def angle_between(road1: Segment, road2: Segment):
+    angle1 = road1.dir()
+    angle2 = road2.dir()
+
+    if road1.start == road2.start or road1.end == road2.end:
+        diff = math.fabs(road1.dir() - road2.dir())
+    else:
+        diff = math.fabs(road1.dir() - road2.dir()) - 180
+
+    while diff < 0:
+        diff += 360
+
+    return min(diff, 360 - diff)

@@ -118,63 +118,60 @@ def local_constraints(inspect_seg, segments, sector_segments):
 
     action = None
     last_snap = SnapType.No
-    last_inter_t = 1
-    last_ext_t = 999
+    last_inter_factor = 1
+    last_ext_factor = 999
 
     if inspect_seg.parent is not None:
-        if not check_angle_diff(inspect_seg, inspect_seg.start, inspect_seg.parent.links_e):
+        if is_road_crowding(inspect_seg, inspect_seg.parent.links_e):
             return False
 
     road_sectors = sectors.from_seg(inspect_seg)
-    for sec in road_sectors:
-        if sec not in sector_segments:
+    for containing_sector in road_sectors:
+        if containing_sector not in sector_segments:
             continue
-        for line in sector_segments[sec]:
+        for line in sector_segments[containing_sector]:
             inter = inspect_seg.find_intersect(line)
-            if last_snap <= SnapType.Cross and inter is not None and 0 < inter[1] < last_inter_t:
-                last_inter_t = inter[1]
+
+            if last_snap <= SnapType.Cross and inter is not None and 0 < inter.main_factor < last_inter_factor:
+                last_inter_factor = inter.main_factor
                 last_snap = SnapType.Cross
 
-                action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
+                action = lambda _, line=line, inter=inter: \
+                    snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
 
             if last_snap <= SnapType.End and vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS:
 
-                action = lambda _, line=line: snap_to_vert(inspect_seg, line, True, False)
+                action = lambda _, line=line: \
+                    snap_to_vert(inspect_seg, line, True, False)
 
-            if last_snap <= SnapType.Extend and inter is not None and 1 < inter[1] < last_ext_t:
-                if vectors.distance(inspect_seg.end, inspect_seg.point_at(inter[1])) < config.SNAP_EXTEND_RADIUS:
-                    last_ext_t = inter[1]
+            if last_snap <= SnapType.Extend and inter is not None and 1 < inter.main_factor < last_ext_factor:
+                if vectors.distance(inspect_seg.end, inspect_seg.point_at(inter.main_factor)) < config.SNAP_EXTEND_RADIUS:
+                    last_ext_factor = inter.main_factor
 
-                    action = lambda _, line=line, inter=inter: snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
+                    action = lambda _, line=line, inter=inter: \
+                        snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
                     last_snap = SnapType.Extend
                     
     if action is not None:
         return action(None)
     return True
 
-def check_angle_diff(inspect_seg, linking_point, to_check):
+# Returns true if the road forms an angle difference < the minimum with any of the roads in to_check
+def is_road_crowding(inspect_seg, to_check):
     for road in to_check:
         if road is not inspect_seg:
-            if road.start == linking_point:
-                angle = road.dir()
-            elif road.end == linking_point:
-                angle = road.dir() - 180
-                if angle < 0:
-                    angle += 360
+            if roads.angle_between(inspect_seg, road) < config.MIN_ANGLE_DIFF:
+                return True
 
-            if angle_between(inspect_seg.dir(), angle) < config.MIN_ANGLE_DIFF:
-                return False
-
-    return True
-
+    return False
 
 def snap_to_cross(mod_road: roads.Segment, all_segments, sector_segments, other_road: roads.Segment, crossing, is_extend):
-    aa = angle_between(mod_road.dir(), other_road.dir())
-    angle_diff = min(aa, math.fabs(aa - 180))
-    if angle_diff < config.MIN_ANGLE_DIFF:
+    angle_diff = roads.angle_between(mod_road, other_road)
+    min_diff = min(angle_diff, math.fabs(angle_diff - 180))
+    if min_diff < config.MIN_ANGLE_DIFF:
         return False
 
-    # Fail if the crossing would produce a really short road
+    # Fail if the crossing would produce a (nearly) zero-length road
     if round(crossing[1], 5) == 0:
         return False
     if round(crossing[1], 5) == 1:
@@ -236,10 +233,7 @@ def snap_to_vert(mod_road, other_road, end, too_close):
         if other_angle < 0:
             other_angle += 360
 
-    if angle_between(mod_road.dir(), other_angle) < config.MIN_ANGLE_DIFF:
-        return False
-
-    if not check_angle_diff(mod_road, linking_point, examine_links):
+    if is_road_crowding(mod_road, examine_links.union({other_road})):
         return False
 
     mod_road.end = linking_point
@@ -252,15 +246,3 @@ def snap_to_vert(mod_road, other_road, end, too_close):
     else:
         mod_road.has_snapped = SnapType.End
     return True
-
-
-def angle_between(a1, a2):
-    while a1 < 0:
-        a1 += 360
-    while a2 < 0:
-        a2 += 360
-
-    reg = math.fabs(a1 - a2)
-    res = min(reg, math.fabs(reg - 360))
-
-    return res
