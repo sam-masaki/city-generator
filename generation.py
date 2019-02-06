@@ -8,10 +8,11 @@ from SnapType import SnapType
 import sectors
 import vectors
 import math
-
+import collections
 
 watch_total = Stopwatch()
 
+City = collections.namedtuple("City", "roads, sectors")
 
 def generate(manual_seed=None):
     watch_total.reset()
@@ -53,7 +54,7 @@ def generate(manual_seed=None):
     watch_total.stop()
     print("Time spent (ms): {}".format(watch_total.passed_ms()))
 
-    return road_segments, road_sectors
+    return City(road_segments, road_sectors)
 
 
 def highway_deviation():
