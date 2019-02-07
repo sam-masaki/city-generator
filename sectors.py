@@ -1,5 +1,6 @@
 import config
 import roads
+import vectors
 from typing import Dict, Tuple, List
 
 
@@ -13,23 +14,20 @@ def add(new_seg, sectors: Dict[Tuple[int, int], List[roads.Segment]]):
 
 
 def from_seg(segment: roads.Segment):
-    all_sectors = set()
-
-    # this could be made variable depending on whether a road is only in one sector, or overlaps NSEW, or overlaps diag
-    # and also it depends on the maximum possible road length
-    # also this whole thing is in dire need of optimizing, but whatever
     start_sector = containing_sector(segment.start)
     end_sector = containing_sector(segment.end)
 
-    all_sectors.add(start_sector)
-    all_sectors.add(end_sector)
+    aux_secs = set()
 
-    edge_dist = config.MIN_DIST_EDGE_CONTAINED if start_sector == end_sector else config.MIN_DIST_EDGE_CROSS
+    if start_sector[0] != end_sector[0] and start_sector[1] != end_sector[1]:
+        diff = vectors.sub(start_sector, end_sector)
+        aux_secs.add((end_sector[0] + diff[0], end_sector[1]))
+        aux_secs.add((end_sector[0], end_sector[1] + diff[1]))
 
-    start_secs = from_point(segment.start, edge_dist)
-    end_secs = from_point(segment.end, edge_dist)
+    start_secs = from_point(segment.start, config.MIN_DIST_EDGE_CONTAINED)
+    end_secs = from_point(segment.end, config.MIN_DIST_EDGE_CONTAINED)
 
-    return start_secs.union(end_secs)
+    return start_secs.union(end_secs).union(aux_secs)
 
 
 def from_point(point, distance):
@@ -37,22 +35,22 @@ def from_point(point, distance):
 
     sectors = {start_sector}
 
+    x_mod = 0
+    y_mod = 0
+
     if point[0] % config.SECTOR_SIZE < distance:
-        sectors.add((start_sector[0] - 1, start_sector[1]))
-        if point[1] % config.SECTOR_SIZE < distance:
-            sectors.add((start_sector[0] - 1, start_sector[1] - 1))
-        elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
-            sectors.add((start_sector[0] - 1, start_sector[1] + 1))
+        x_mod = -1
     elif config.SECTOR_SIZE - (point[0] % config.SECTOR_SIZE) < distance:
-        sectors.add((start_sector[0] + 1, start_sector[1]))
-        if config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
-            sectors.add((start_sector[0] + 1, start_sector[1] + 1))
-        elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
-            sectors.add((start_sector[0] + 1, start_sector[1] - 1))
+        x_mod = 1
+
     if point[1] % config.SECTOR_SIZE < distance:
-        sectors.add((start_sector[0], start_sector[1] - 1))
+        y_mod = -1
     elif config.SECTOR_SIZE - (point[1] % config.SECTOR_SIZE) < distance:
-        sectors.add((start_sector[0], start_sector[1] + 1))
+        y_mod = 1
+
+    sectors.add(vectors.add(start_sector, (x_mod, 0)))
+    sectors.add(vectors.add(start_sector, (0, y_mod)))
+    sectors.add(vectors.add(start_sector, (x_mod, y_mod)))
 
     return sectors
 
