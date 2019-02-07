@@ -18,7 +18,6 @@ from Stopwatch import Stopwatch
 
 class InputData:
     def __init__(self):
-        self.zoom_incr = 0
         self.pos = (0, 0)
         self._pressed = (False, False, False)
         self._prev_pressed = (False, False, False)
@@ -42,7 +41,7 @@ class InputData:
 def main():
     pygame.init()
 
-    screen_data = drawing.ScreenData(pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE), (0, 0), 1)
+    screen_data = drawing.ScreenData(pygame.display.set_mode(config.SCREEN_RES, pygame.RESIZABLE), (0, 0))
     input_data = InputData()
     path_data = pathing.PathData()
     selection = None
@@ -102,9 +101,9 @@ def main():
 
                 # Pathing
                 elif event.key == pygame.K_z:
-                    path_data.start = road_near_point(drawing.screen_to_world(input_data.pos, screen_data), city)
+                    path_data.start = road_near_point(drawing.screen_to_world(input_data.pos, screen_data.pan, screen_data.zoom), city)
                 elif event.key == pygame.K_x:
-                    path_data.end = road_near_point(drawing.screen_to_world(input_data.pos, screen_data), city)
+                    path_data.end = road_near_point(drawing.screen_to_world(input_data.pos, screen_data.pan, screen_data.zoom), city)
                 elif event.key == pygame.K_c:
                     pathing.astar(path_data, city.roads)
                 elif event.key == pygame.K_v:
@@ -112,12 +111,9 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Zooming
                 if event.button == 4:
-                    zoom_change(input_data.zoom_incr, 1, input_data.pos, screen_data)
-                    input_data.zoom_incr += 1
+                    screen_data.zoom_in(input_data.pos)
                 elif event.button == 5:
-                    if input_data.zoom_incr > (-config.ZOOM_GRANULARITY) + 1:
-                        zoom_change(input_data.zoom_incr, -1, input_data.pos, screen_data)
-                        input_data.zoom_incr -= 1
+                    screen_data.zoom_out(input_data.pos)
 
         # Dragging
         if input_data.prev_pressed[0]:
@@ -126,7 +122,7 @@ def main():
                 input_data.drag_prev_pos = input_data.pos
             else:
                 if input_data.pos == input_data.drag_start:
-                    selection = debug.selection_from_road(road_near_point(drawing.screen_to_world(input_data.drag_start, screen_data), city))
+                    selection = debug.selection_from_road(road_near_point(drawing.screen_to_world(input_data.drag_start, screen_data.pan, screen_data.zoom), city))
 
                 input_data.drag_start = None
                 input_data.drag_prev_pos = (0, 0)
@@ -143,8 +139,8 @@ def main():
         if debug.SHOW_ISOLATE_SECTOR and selection is not None:
             drawing.draw_all_roads(city.sectors[sectors.containing_sector(selection.road.point_at(0.5))], screen_data)
         else:
-            tl_sect = sectors.containing_sector(drawing.screen_to_world((0, 0), screen_data))
-            br_sect = sectors.containing_sector(drawing.screen_to_world(config.SCREEN_RES, screen_data))
+            tl_sect = sectors.containing_sector(drawing.screen_to_world((0, 0), screen_data.pan, screen_data.zoom))
+            br_sect = sectors.containing_sector(drawing.screen_to_world(config.SCREEN_RES, screen_data.pan, screen_data.zoom))
             for x in range(tl_sect[0], br_sect[0] + 1):
                 for y in range(tl_sect[1], br_sect[1] + 1):
                     if (x, y) in city.sectors:
@@ -167,7 +163,7 @@ def main():
                 
         if debug.SHOW_ROAD_ORDER:
             for label in road_labels:
-                label_pos = drawing.world_to_screen(label[1], screen_data)
+                label_pos = drawing.world_to_screen(label[1], screen_data.pan, screen_data.zoom)
                 if -20 < label_pos[0] < config.SCREEN_RES[0] and -20 < label_pos[1] < config.SCREEN_RES[1]:
                     screen_data.screen.blit(label[0], label_pos)
 
@@ -188,26 +184,6 @@ def road_near_point(world_pos: Tuple[float, float], city: generation.City):
             found_road = closest[0]
 
     return found_road
-
-
-def zoom_change(prev, increment, center, data):
-    new_step = prev + increment
-
-    old_level = zoom_at(prev)
-    new_level = zoom_at(new_step)
-
-    old_world = drawing.screen_to_world(center, drawing.ScreenData(None, data.pan, old_level))
-    new_world = drawing.screen_to_world(center, drawing.ScreenData(None, data.pan, new_level))
-
-    world_pan = vectors.sub(new_world, old_world)
-
-    data.zoom = new_level
-    data.pan = vectors.add(data.pan, drawing.world_to_screen(world_pan, drawing.ScreenData(None, (0, 0), new_level)))
-    return
-
-
-def zoom_at(step):
-    return math.pow((step / config.ZOOM_GRANULARITY) + 1, 2)
 
 
 if __name__ == "__main__":
