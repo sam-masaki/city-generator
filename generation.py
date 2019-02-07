@@ -14,6 +14,7 @@ watch_total = Stopwatch()
 
 City = collections.namedtuple("City", "roads, sectors")
 
+
 def generate(manual_seed=None):
     watch_total.reset()
     watch_total.start()

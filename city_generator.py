@@ -10,9 +10,11 @@ import sectors
 import vectors
 import config
 import debug
-from generation import generate
+import generation
 import drawing
 import collections
+from Stopwatch import Stopwatch
+
 
 class InputData:
     def __init__(self):
@@ -36,6 +38,7 @@ class InputData:
     def prev_pressed(self):
         return self._prev_pressed
 
+
 def main():
     pygame.init()
 
@@ -46,7 +49,7 @@ def main():
 
     gohu_font = pygame.font.SysFont("gohufont, terminusttf, couriernew", 14)
 
-    city = generate()
+    city = generation.generate()
     road_labels = []
 
     # Inter-frame Variables
@@ -72,7 +75,7 @@ def main():
                 config.SCREEN_RES = event.dict["size"]
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
-                    city = generate()
+                    city = generation.generate()
                 # Debug Views
                 elif event.key == pygame.K_1:
                     debug.SHOW_INFO = not debug.SHOW_INFO
@@ -99,9 +102,9 @@ def main():
 
                 # Pathing
                 elif event.key == pygame.K_z:
-                    path_data.start = select_nearby_road(drawing.screen_to_world(input_data.pos, screen_data), city.roads)
+                    path_data.start = road_near_point(drawing.screen_to_world(input_data.pos, screen_data), city)
                 elif event.key == pygame.K_x:
-                    path_data.end = select_nearby_road(drawing.screen_to_world(input_data.pos, screen_data), city.roads)
+                    path_data.end = road_near_point(drawing.screen_to_world(input_data.pos, screen_data), city)
                 elif event.key == pygame.K_c:
                     pathing.astar(path_data, city.roads)
                 elif event.key == pygame.K_v:
@@ -123,23 +126,10 @@ def main():
                 input_data.drag_prev_pos = input_data.pos
             else:
                 if input_data.pos == input_data.drag_start:
-                    selected = select_nearby_road(drawing.screen_to_world(input_data.drag_start, screen_data), city.roads)
-                    if selected is not None:
-                        start_ids = []
-                        end_ids = []
-                        connections = []
-                        selected_sectors = sectors.from_seg(selected)
-                        for road in selected.links_s:
-                            start_ids.append(road.global_id)
-                            connections.append(road)
-                        for road in selected.links_e:
-                            end_ids.append(road.global_id)
-                            connections.append(road)
-                        selection = debug.Selection(selected, connections, start_ids, end_ids, selected_sectors)
-                    else:
-                        selection = None
+                    selection = debug.selection_from_road(road_near_point(drawing.screen_to_world(input_data.drag_start, screen_data), city))
 
                 input_data.drag_start = None
+                input_data.drag_prev_pos = (0, 0)
         else:
             if input_data.pressed[0]:
                 input_data.drag_start = input_data.pos
@@ -184,18 +174,20 @@ def main():
         pygame.display.flip()
 
 
-def select_nearby_road(world_pos: Tuple[float, float], all_roads: List[roads.Segment]):
+def road_near_point(world_pos: Tuple[float, float], city: generation.City):
     closest: Tuple[roads.Segment, float] = (None, 9999)
-    for road in all_roads:
-        dist = vectors.distance(world_pos, road.point_at(0.5))
-        if dist < closest[1]:
-            closest = (road, dist)
-    if closest[1] < 100:
-        selected = closest[0]
+    found_road = None
+    examine_sectors = sectors.from_point(world_pos, 100)
 
-        return selected
+    for sector in examine_sectors:
+        for road in city.sectors[sector]:
+            dist = vectors.distance(world_pos, road.point_at(0.5))
+            if dist < closest[1]:
+                closest = (road, dist)
+        if closest[1] < 100:
+            found_road = closest[0]
 
-    return None
+    return found_road
 
 
 def zoom_change(prev, increment, center, data):
