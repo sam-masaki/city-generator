@@ -26,7 +26,7 @@ def labels(screen_data, input_data, path_data, selection):
     debug_labels_left.append("    pop_at: {}".format(population.at_point(mouse_world_pos)))
     debug_labels_left.append("    sec_at: {}".format(sectors.containing_sector(mouse_world_pos)))
     debug_labels_left.append("Pan: {}".format(screen_data.pan))
-    debug_labels_left.append("Zoom: {}x".format(str(screen_data.zoom)))
+    debug_labels_left.append("Zoom: {}, Step: {}".format(str(screen_data.zoom), str(input_data.zoom_incr)))
 
     if selection is not None:
         debug_labels_left.append("Selected: {}".format(str(selection.road.global_id)))

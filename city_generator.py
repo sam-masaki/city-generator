@@ -115,7 +115,7 @@ def main():
                     zoom_change(input_data.zoom_incr, 1, input_data.pos, screen_data)
                     input_data.zoom_incr += 1
                 elif event.button == 5:
-                    if input_data.zoom_incr > -11:
+                    if input_data.zoom_incr > (-config.ZOOM_GRANULARITY) + 1:
                         zoom_change(input_data.zoom_incr, -1, input_data.pos, screen_data)
                         input_data.zoom_incr -= 1
 
@@ -207,7 +207,7 @@ def zoom_change(prev, increment, center, data):
 
 
 def zoom_at(step):
-    return math.pow((step / 12) + 1, 2)
+    return math.pow((step / config.ZOOM_GRANULARITY) + 1, 2)
 
 
 if __name__ == "__main__":
