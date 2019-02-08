@@ -98,6 +98,8 @@ def main():
                     debug.SHOW_SECTORS = not debug.SHOW_SECTORS
                 elif event.key == pygame.K_6:
                     debug.SHOW_ISOLATE_SECTOR = not debug.SHOW_ISOLATE_SECTOR
+                elif event.key == pygame.K_7:
+                    debug.SHOW_MOUSE_SECTOR = not debug.SHOW_MOUSE_SECTOR
 
                 # Pathing
                 elif event.key == pygame.K_z:
@@ -137,7 +139,12 @@ def main():
         if debug.SHOW_SECTORS:
             drawing.draw_sectors(screen_data)
         if debug.SHOW_ISOLATE_SECTOR and selection is not None:
-            drawing.draw_all_roads(city.sectors[sectors.containing_sector(selection.road.point_at(0.5))], screen_data)
+            for sector in sectors.from_seg(selection.road):
+                drawing.draw_all_roads(city.sectors[sector], screen_data)
+        elif debug.SHOW_MOUSE_SECTOR:
+            mouse_sec = sectors.containing_sector(drawing.screen_to_world(input_data.pos, screen_data.pan, screen_data.zoom))
+            if mouse_sec in city.sectors:
+                drawing.draw_all_roads(city.sectors[mouse_sec], screen_data)
         else:
             tl_sect = sectors.containing_sector(drawing.screen_to_world((0, 0), screen_data.pan, screen_data.zoom))
             br_sect = sectors.containing_sector(drawing.screen_to_world(config.SCREEN_RES, screen_data.pan, screen_data.zoom))
