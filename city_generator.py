@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import pygame
 
@@ -177,7 +177,7 @@ def main():
         pygame.display.flip()
 
 
-def road_near_point(world_pos: Tuple[float, float], city: generation.City):
+def road_near_point(world_pos: Tuple[float, float], city: generation.City) -> Optional[roads.Segment]:
     closest: Tuple[roads.Segment, float] = (None, 9999)
     found_road = None
     examine_sectors = sectors.from_point(world_pos, 100)

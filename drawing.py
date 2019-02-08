@@ -6,6 +6,8 @@ import pygame
 import math
 import population
 import vectors
+import roads
+from typing import Tuple, List
 
 
 class ScreenData:
@@ -41,19 +43,19 @@ class ScreenData:
         return
 
 
-def world_to_screen(world_pos, pan, zoom):
+def world_to_screen(world_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
     result = ((world_pos[0] * zoom) + pan[0],
               (world_pos[1] * zoom) + pan[1])
     return result
 
 
-def screen_to_world(screen_pos, pan, zoom):
+def screen_to_world(screen_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
     result = (((screen_pos[0] - pan[0]) / zoom),
               ((screen_pos[1] - pan[1]) / zoom))
     return result
 
 
-def draw_all_roads(all_roads, data: ScreenData):
+def draw_all_roads(all_roads: List[roads.Segment], data: ScreenData):
     for road in all_roads:
         width = config.ROAD_WIDTH
         color = (255, 255, 255)
@@ -79,7 +81,7 @@ def draw_all_roads(all_roads, data: ScreenData):
         draw_road(road, color, width, data)
 
 
-def draw_roads_selected(selection, data: ScreenData):
+def draw_roads_selected(selection: 'debug.Selection', data: ScreenData):
     if selection is not None:
         draw_road(selection[0], (255, 255, 0), config.ROAD_WIDTH_SELECTION, data)
 
@@ -108,11 +110,11 @@ def draw_roads_path(path_data: pathing.PathData, data: ScreenData):
         draw_road(path_data.end, (255, 0, 0), width, data)
 
 
-def draw_road(road, color, width, data):
+def draw_road(road: roads.Segment, color: Tuple[int, int, int], width: int, data: ScreenData):
     pygame.draw.line(data.screen, color, world_to_screen(road.start, data.pan, data.zoom), world_to_screen(road.end, data.pan, data.zoom), width)
 
 
-def draw_heatmap(square_size, data):
+def draw_heatmap(square_size: int, data: ScreenData):
     x_max = math.ceil(config.SCREEN_RES[0] / square_size) + 1
     y_max = math.ceil(config.SCREEN_RES[1] / square_size) + 1
 
@@ -131,7 +133,7 @@ def draw_heatmap(square_size, data):
             pygame.draw.rect(data.screen, color, pygame.Rect(pos, dim))
 
 
-def draw_sectors(data):
+def draw_sectors(data: ScreenData):
     x_min = round(screen_to_world((0, 0), data.pan, data.zoom)[0] // config.SECTOR_SIZE) + 1
     x_max = round(screen_to_world((config.SCREEN_RES[0], 0), data.pan, data.zoom)[0] // config.SECTOR_SIZE) + 1
 
