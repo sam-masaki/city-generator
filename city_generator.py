@@ -183,12 +183,13 @@ def road_near_point(world_pos: Tuple[float, float], city: generation.City):
     examine_sectors = sectors.from_point(world_pos, 100)
 
     for sector in examine_sectors:
-        for road in city.sectors[sector]:
-            dist = vectors.distance(world_pos, road.point_at(0.5))
-            if dist < closest[1]:
-                closest = (road, dist)
-        if closest[1] < 100:
-            found_road = closest[0]
+        if sector in city.sectors:
+            for road in city.sectors[sector]:
+                dist = vectors.distance(world_pos, road.point_at(0.5))
+                if dist < closest[1]:
+                    closest = (road, dist)
+            if closest[1] < 100:
+                found_road = closest[0]
 
     return found_road
 

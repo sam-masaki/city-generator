@@ -1,13 +1,15 @@
 from config import NOISE_SEED
 from noise import snoise2
+from typing import Tuple
 import math
+import roads
 
 
-def at_line(seg):
+def at_line(seg: roads.Segment) -> float:
     return (at_point(seg.start) + at_point(seg.end)) / 2
 
 
-def at_point(point):
+def at_point(point: Tuple[float, float]) -> float:
     x = point[0] + NOISE_SEED[0]
     y = point[1] + NOISE_SEED[1]
 

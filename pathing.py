@@ -1,5 +1,7 @@
 from heapdict import heapdict
+from typing import List
 
+import roads
 import vectors
 
 
@@ -12,9 +14,9 @@ class PathData:
         self.length = 0
 
 
-def astar(data: PathData, all_roads):
+def astar(data: PathData, all_roads: List[roads.Segment]):
     data.searched = []
-    open = heapdict()
+    open_roads = heapdict()
 
     dist_start = {}
     dist_end = {}
@@ -32,10 +34,10 @@ def astar(data: PathData, all_roads):
         dist_end[road] = init_end
         prev_road[road] = None
 
-    open[data.start] = dist_end[data.start]
+    open_roads[data.start] = dist_end[data.start]
 
-    while len(open):
-        curr_min = open.popitem()[0]
+    while len(open_roads):
+        curr_min = open_roads.popitem()[0]
         if curr_min is data.end:
             break
 
@@ -52,15 +54,15 @@ def astar(data: PathData, all_roads):
                 dist_start[road] = new_dist_start
                 dist_end[road] = new_dist_start + heuristic(road, data.end)
                 prev_road[road] = curr_min
-                if road not in open:
-                    open[road] = dist_end[road]
+                if road not in open_roads:
+                    open_roads[road] = dist_end[road]
 
     data.path = []
     data.length = retrace_path(prev_road, data)
     return
 
 
-def dijkstra(data: PathData, all_roads):
+def dijkstra(data: PathData, all_roads: List[roads.Segment]):
     node_queue = heapdict()
 
     dist_start = {}
@@ -95,7 +97,7 @@ def dijkstra(data: PathData, all_roads):
     return
 
 
-def retrace_path(previous_node, data):
+def retrace_path(previous_node, data) -> int:
     length = 0
     if previous_node[data.end] is not None or data.end is data.start:
         curr_node = data.end
@@ -106,11 +108,11 @@ def retrace_path(previous_node, data):
     return length
 
 
-def heuristic(road, goal):
+def heuristic(road: roads.Segment, goal: roads.Segment) -> float:
     return vectors.distance(road.point_at(0.5), goal.point_at(0.5)) * 0.1
 
 
-def cost(road):
+def cost(road: roads.Segment) -> int:
     multiplier = 0.75 if road.is_highway else 1
 
     return round(road.length() * multiplier * 0.1)

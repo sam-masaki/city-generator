@@ -1,10 +1,10 @@
 import config
 import roads
 import vectors
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Set
 
 
-def add(new_seg, sectors: Dict[Tuple[int, int], List[roads.Segment]]):
+def add(new_seg: roads.Segment, sectors: Dict[Tuple[int, int], List[roads.Segment]]):
     containing_sectors = from_seg(new_seg)
 
     for sector in containing_sectors:
@@ -13,7 +13,7 @@ def add(new_seg, sectors: Dict[Tuple[int, int], List[roads.Segment]]):
         sectors[sector].append(new_seg)
 
 
-def from_seg(segment: roads.Segment):
+def from_seg(segment: roads.Segment) -> Set[Tuple[int, int]]:
     start_sector = containing_sector(segment.start)
     end_sector = containing_sector(segment.end)
 
@@ -30,7 +30,7 @@ def from_seg(segment: roads.Segment):
     return start_secs.union(end_secs).union(aux_secs)
 
 
-def from_point(point, distance):
+def from_point(point: Tuple[float, float], distance: int) -> Set[Tuple[int, int]]:
     start_sector = containing_sector(point)
 
     sectors = {start_sector}
@@ -55,5 +55,5 @@ def from_point(point, distance):
     return sectors
 
 
-def containing_sector(point):
+def containing_sector(point: Tuple[float, float]) -> Tuple[int, int]:
     return int(point[0] // config.SECTOR_SIZE), int(point[1] // config.SECTOR_SIZE)

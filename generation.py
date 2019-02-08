@@ -9,13 +9,14 @@ import sectors
 import vectors
 import math
 import collections
+from typing import List, Dict, Tuple, Set
 
 watch_total = Stopwatch()
 
 City = collections.namedtuple("City", "roads, sectors")
 
 
-def generate(manual_seed=None):
+def generate(manual_seed: int = None) -> City:
     watch_total.reset()
     watch_total.start()
 
@@ -30,6 +31,7 @@ def generate(manual_seed=None):
     random.seed(seed)
 
     road_queue = roads.Queue()
+
     road_queue.push(roads.Segment((0, 0), (config.HIGHWAY_LENGTH, 0), True))
 
     road_segments = []
@@ -55,15 +57,15 @@ def generate(manual_seed=None):
     return City(road_segments, road_sectors)
 
 
-def highway_deviation():
+def highway_deviation() -> int:
     return random.randint(-1 * config.HIGHWAY_MAX_ANGLE_DEV, config.HIGHWAY_MAX_ANGLE_DEV)
 
 
-def branch_deviation():
+def branch_deviation() -> int:
     return random.randint(-1 * config.BRANCH_MAX_ANGLE_DEV, config.BRANCH_MAX_ANGLE_DEV)
 
 
-def global_goals(previous_segment: roads.Segment):
+def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
     new_segments = []
 
     if previous_segment.has_snapped != SnapType.No:
@@ -112,7 +114,7 @@ def global_goals(previous_segment: roads.Segment):
     return new_segments
 
 
-def local_constraints(inspect_seg, segments, sector_segments):
+def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment], sector_segments: Dict[Tuple[int, int], List[roads.Segment]]) -> bool:
     # watch_local.start()
 
     action = None
@@ -155,8 +157,9 @@ def local_constraints(inspect_seg, segments, sector_segments):
         return action(None)
     return True
 
+
 # Returns true if the road forms an angle difference < the minimum with any of the roads in to_check
-def is_road_crowding(inspect_seg, to_check):
+def is_road_crowding(inspect_seg: roads.Segment, to_check: Set[roads.Segment]):
     for road in to_check:
         if road is not inspect_seg:
             if roads.angle_between(inspect_seg, road) < config.MIN_ANGLE_DIFF:
@@ -164,7 +167,10 @@ def is_road_crowding(inspect_seg, to_check):
 
     return False
 
-def snap_to_cross(mod_road: roads.Segment, all_segments, sector_segments, other_road: roads.Segment, crossing, is_extend):
+
+def snap_to_cross(mod_road: roads.Segment, all_segments: List[roads.Segment],
+                  sector_segments: Dict[Tuple[int, int], List[roads.Segment]],
+                  other_road: roads.Segment, crossing: roads.Intersection, is_extend: bool) -> bool:
     angle_diff = roads.angle_between(mod_road, other_road)
     min_diff = min(angle_diff, math.fabs(angle_diff - 180))
     if min_diff < config.MIN_ANGLE_DIFF:
@@ -220,17 +226,13 @@ def snap_to_cross(mod_road: roads.Segment, all_segments, sector_segments, other_
     return True
 
 
-def snap_to_vert(mod_road, other_road, end, too_close):
+def snap_to_vert(mod_road: roads.Segment, other_road: roads.Segment, end: bool, too_close: bool) -> bool:
     if end:
         linking_point = other_road.end
         examine_links = other_road.links_e
-        other_angle = other_road.dir()
     else:
         linking_point = other_road.start
         examine_links = other_road.links_s
-        other_angle = other_road.dir() - 180
-        if other_angle < 0:
-            other_angle += 360
 
     if is_road_crowding(mod_road, examine_links.union({other_road})):
         return False

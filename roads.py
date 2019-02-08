@@ -3,8 +3,10 @@ from SnapType import SnapType
 import vectors
 import math
 import collections
+from typing import Tuple, Optional
 
 Intersection = collections.namedtuple("Intersection", ["point", "main_factor", "other_factor"])
+
 
 class Queue:
     def __init__(self):
@@ -23,7 +25,7 @@ class Queue:
 class Segment:
     seg_id = 0
 
-    def __init__(self, start, end, is_highway, time_delay=0):
+    def __init__(self, start: Tuple[float, float], end: Tuple[float, float], is_highway: bool, time_delay: int = 0):
         self.start = start
         self.end = end
         self.is_highway = is_highway
@@ -40,16 +42,17 @@ class Segment:
 
         Segment.seg_id += 1
 
-    def __lt__(self, other):
+    def __lt__(self, other: 'Segment'):
         return self.t < other.t
 
-    def __gt__(self, other):
+    def __gt__(self, other: 'Segment'):
         return self.t > other.t
 
     def copy(self):
         return Segment(self.start, self.end, self.is_highway, self.t)
 
-    def make_continuation(self, length, offset, is_highway, is_branch, delay=0):
+    def make_continuation(self, length: float, offset: float,
+                          is_highway: bool, is_branch: bool, delay: int = 0) -> 'Segment':
         radian_dir = math.radians(self.dir() + offset)
 
         end_x = self.end[0] + (length * math.cos(radian_dir))
@@ -60,16 +63,17 @@ class Segment:
 
         return road
 
-    def make_extension(self, deviation):
+    def make_extension(self, deviation: float) -> 'Segment':
         return self.make_continuation(self.length(), deviation, self.is_highway, False)
 
-    def length(self):
+    def length(self) -> float:
         return vectors.distance(self.start, self.end)
 
-    def dir(self):
+    def dir(self) -> float:
         angle = math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
         if angle < 0:
             angle += 360
+
         return angle
 
     # links this road with every road that this is connected with and sets settled to true
@@ -93,11 +97,12 @@ class Segment:
 
         self.settled = True
 
-    def point_at(self, factor):
+    def point_at(self, factor: float) -> Tuple[float, float]:
         end_vector = vectors.sub(self.end, self.start)
+
         return self.start[0] + (factor * end_vector[0]), self.start[1] + (factor * end_vector[1])
 
-    def find_intersect(self, other):
+    def find_intersect(self, other: 'Segment') -> Optional[Intersection]:
         r = vectors.sub(self.end, self.start)
         s = vectors.sub(other.end, other.start)
 
@@ -110,7 +115,6 @@ class Segment:
         this_factor = t_numerator / denominator
         other_factor = u_numerator / denominator
 
-
         if 0 < other_factor < 1:
             return Intersection((self.start[0] + (this_factor * r[0]), self.start[1] + (this_factor * r[1])),
                                 this_factor,
@@ -118,18 +122,14 @@ class Segment:
 
         return None
 
-# Gets the angle formed by two roads
-# Assumes the roads are connected and not the same
-def angle_between(road1: Segment, road2: Segment):
-    angle1 = road1.dir()
-    angle2 = road2.dir()
 
-    if road1.start == road2.start or road1.end == road2.end:
-        diff = math.fabs(road1.dir() - road2.dir())
-    else:
-        diff = math.fabs(road1.dir() - road2.dir()) - 180
+# Gets the angle formed by two roads assuming they are connected
+def angle_between(road1: Segment, road2: Segment) -> float:
+    diff = math.fabs(road1.dir() - road2.dir())
 
-    while diff < 0:
-        diff += 360
+    if road1.start != road2.start and road1.end != road2.end:
+        diff -= 180
+        if diff < 0:
+            diff += 360
 
     return min(diff, 360 - diff)
