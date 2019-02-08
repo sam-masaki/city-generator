@@ -137,24 +137,24 @@ def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment],
                 last_inter_factor = inter.main_factor
                 last_snap = SnapType.Cross
 
-                action = lambda _, line=line, inter=inter: \
-                    snap_to_cross(inspect_seg, segments, sector_segments, line, inter, False)
+                def action(other_seg=line, crossing=inter) -> bool:
+                    return snap_to_cross(inspect_seg, segments, sector_segments, other_seg, crossing, False)
 
             if last_snap <= SnapType.End and vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS:
 
-                action = lambda _, line=line: \
-                    snap_to_vert(inspect_seg, line, True, False)
+                def action(other_seg=line) -> bool:
+                    return snap_to_vert(inspect_seg, other_seg, True, False)
 
             if last_snap <= SnapType.Extend and inter is not None and 1 < inter.main_factor < last_ext_factor:
                 if vectors.distance(inspect_seg.end, inspect_seg.point_at(inter.main_factor)) < config.SNAP_EXTEND_RADIUS:
                     last_ext_factor = inter.main_factor
 
-                    action = lambda _, line=line, inter=inter: \
-                        snap_to_cross(inspect_seg, segments, sector_segments, line, inter, True)
+                    def action(other_seg=line, crossing=inter) -> bool:
+                        return snap_to_cross(inspect_seg, segments, sector_segments, other_seg, crossing, True)
                     last_snap = SnapType.Extend
                     
     if action is not None:
-        return action(None)
+        return action()
     return True
 
 
