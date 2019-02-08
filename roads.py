@@ -36,7 +36,6 @@ class Segment:
         self.links_e = set()
         self.settled = False
 
-        self.insertion_order = 0
         self.global_id = Segment.seg_id
 
         Segment.seg_id += 1

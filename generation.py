@@ -35,12 +35,10 @@ def generate(manual_seed=None):
     road_segments = []
     road_sectors = {}
 
-    loop_count = 0
     while not road_queue.is_empty() and len(road_segments) <= config.MAX_SEGS:
         seg = road_queue.pop()
 
         if local_constraints(seg, road_segments, road_sectors):
-            seg.insertion_order = loop_count
             seg.connect_links()
             road_segments.append(seg)
             sectors.add(seg, road_sectors)
@@ -50,7 +48,6 @@ def generate(manual_seed=None):
             for new_seg in new_segments:
                 new_seg.t += seg.t + 1
                 road_queue.push(new_seg)
-        loop_count += 1
 
     watch_total.stop()
     print("Time spent (ms): {}".format(watch_total.passed_ms()))
