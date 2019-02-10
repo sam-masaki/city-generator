@@ -14,6 +14,7 @@ def add(new_seg: roads.Segment, sectors: Dict[Tuple[int, int], List[roads.Segmen
 
 
 def from_seg(segment: roads.Segment) -> Set[Tuple[int, int]]:
+    """ Gets the sectors the segment is in or within snapping distance of """
     start_sector = containing_sector(segment.start)
     end_sector = containing_sector(segment.end)
 
@@ -31,6 +32,7 @@ def from_seg(segment: roads.Segment) -> Set[Tuple[int, int]]:
 
 
 def from_point(point: Tuple[float, float], distance: int) -> Set[Tuple[int, int]]:
+    """ Gets the sector the point is in plus the sectors it is within the given distance of """
     start_sector = containing_sector(point)
 
     sectors = {start_sector}
@@ -56,4 +58,5 @@ def from_point(point: Tuple[float, float], distance: int) -> Set[Tuple[int, int]
 
 
 def containing_sector(point: Tuple[float, float]) -> Tuple[int, int]:
+    """ Gets the single sector the point is in """
     return int(point[0] // config.SECTOR_SIZE), int(point[1] // config.SECTOR_SIZE)

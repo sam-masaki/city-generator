@@ -44,18 +44,21 @@ class ScreenData:
 
 
 def world_to_screen(world_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
+    """ Converts world coordinates to screen coordinates using the pan and zoom of the screen """
     result = ((world_pos[0] * zoom) + pan[0],
               (world_pos[1] * zoom) + pan[1])
     return result
 
 
 def screen_to_world(screen_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
+    """ Converts screen coordinates to world coordinates using the pan and zoom of the screen """
     result = (((screen_pos[0] - pan[0]) / zoom),
               ((screen_pos[1] - pan[1]) / zoom))
     return result
 
 
 def draw_all_roads(all_roads: List[roads.Segment], data: ScreenData):
+    """ Draws the roads in all_roads to the surface in data"""
     for road in all_roads:
         width = config.ROAD_WIDTH
         color = (255, 255, 255)
@@ -115,6 +118,7 @@ def draw_road(road: roads.Segment, color: Tuple[int, int, int], width: int, data
 
 
 def draw_heatmap(square_size: int, data: ScreenData):
+    """ Draws the population heatmap to the screen in the given ScreenData with """
     x_max = math.ceil(config.SCREEN_RES[0] / square_size) + 1
     y_max = math.ceil(config.SCREEN_RES[1] / square_size) + 1
 
@@ -134,19 +138,13 @@ def draw_heatmap(square_size: int, data: ScreenData):
 
 
 def draw_sectors(data: ScreenData):
+    """ Draws sector grid onto the surface of the given ScreenData"""
     x_min = round(screen_to_world((0, 0), data.pan, data.zoom)[0] // config.SECTOR_SIZE) + 1
     x_max = round(screen_to_world((config.SCREEN_RES[0], 0), data.pan, data.zoom)[0] // config.SECTOR_SIZE) + 1
 
     x_range = range(x_min, x_max)
     for x in x_range:
         pos_x = world_to_screen((config.SECTOR_SIZE * x, 0), data.pan, data.zoom)[0]
-
-        pygame.draw.line(data.screen, (100, 200, 100),
-                         (pos_x + (config.MIN_DIST_EDGE_CONTAINED * data.zoom), 0),
-                         (pos_x + (config.MIN_DIST_EDGE_CONTAINED * data.zoom), config.SCREEN_RES[1]))
-        pygame.draw.line(data.screen, (100, 200, 100),
-                         (pos_x - (config.MIN_DIST_EDGE_CONTAINED * data.zoom), 0),
-                         (pos_x - (config.MIN_DIST_EDGE_CONTAINED * data.zoom), config.SCREEN_RES[1]))
 
         pygame.draw.line(data.screen, (200, 200, 200), (pos_x, 0), (pos_x, config.SCREEN_RES[1]))
 
@@ -156,13 +154,5 @@ def draw_sectors(data: ScreenData):
     y_range = range(y_min, y_max)
     for y in y_range:
         pos_y = world_to_screen((0, config.SECTOR_SIZE * y), data.pan, data.zoom)[1]
-
-        pygame.draw.line(data.screen, (100, 200, 100),
-                         (0, pos_y + (config.MIN_DIST_EDGE_CONTAINED * data.zoom)),
-                         (config.SCREEN_RES[0], pos_y + (config.MIN_DIST_EDGE_CONTAINED * data.zoom)))
-
-        pygame.draw.line(data.screen, (100, 200, 100),
-                         (0, pos_y - (config.MIN_DIST_EDGE_CONTAINED * data.zoom)),
-                         (config.SCREEN_RES[0], pos_y - (config.MIN_DIST_EDGE_CONTAINED * data.zoom)))
 
         pygame.draw.line(data.screen, (200, 200, 200), (0, pos_y), (config.SCREEN_RES[0], pos_y))

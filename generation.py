@@ -17,6 +17,7 @@ City = collections.namedtuple("City", "roads, sectors")
 
 
 def generate(manual_seed: int = None) -> City:
+    """ Generates a City with the given seed, or a random seed """
     watch_total.reset()
     watch_total.start()
 
@@ -27,23 +28,22 @@ def generate(manual_seed: int = None) -> City:
         seed = config.ROAD_SEED
     else:
         seed = time.process_time()
-    print("Generating {} segments with seed: {}".format(config.MAX_SEGS, seed))
     random.seed(seed)
 
-    road_queue = roads.Queue()
+    print("Generating {} segments with seed: {}".format(config.MAX_SEGS, seed))
 
+    road_queue = roads.Queue()
     road_queue.push(roads.Segment((0, 0), (config.HIGHWAY_LENGTH, 0), True))
 
-    road_segments = []
-    road_sectors = {}
+    city = City([], {})
 
-    while not road_queue.is_empty() and len(road_segments) <= config.MAX_SEGS:
+    while not road_queue.is_empty() and len(city.roads) <= config.MAX_SEGS:
         seg = road_queue.pop()
 
-        if local_constraints(seg, road_segments, road_sectors):
+        if local_constraints(seg, city):  # If the road doesn't interfere with existing roads
             seg.connect_links()
-            road_segments.append(seg)
-            sectors.add(seg, road_sectors)
+            city.roads.append(seg)
+            sectors.add(seg, city.sectors)
 
             new_segments = global_goals(seg)
 
@@ -54,18 +54,25 @@ def generate(manual_seed: int = None) -> City:
     watch_total.stop()
     print("Time spent (ms): {}".format(watch_total.passed_ms()))
 
-    return City(road_segments, road_sectors)
+    return city
 
 
 def highway_deviation() -> int:
-    return random.randint(-1 * config.HIGHWAY_MAX_ANGLE_DEV, config.HIGHWAY_MAX_ANGLE_DEV)
+    """ Generates a random angle deviation in degrees for a highway """
+    return random.randint(-config.HIGHWAY_MAX_ANGLE_DEV, config.HIGHWAY_MAX_ANGLE_DEV)
 
 
 def branch_deviation() -> int:
-    return random.randint(-1 * config.BRANCH_MAX_ANGLE_DEV, config.BRANCH_MAX_ANGLE_DEV)
+    """ Generates a random angle deviation in degrees for a branch """
+    return random.randint(-config.BRANCH_MAX_ANGLE_DEV, config.BRANCH_MAX_ANGLE_DEV)
 
 
 def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
+    """
+    Takes a road that has been placed in the city, and generates new roads (branches & extensions) from it
+    :param previous_segment: Road to generate continuations from. Assumed to already be settled
+    :return: a list of the newly generated roads
+    """
     new_segments = []
 
     if previous_segment.has_snapped != SnapType.No:
@@ -114,7 +121,13 @@ def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
     return new_segments
 
 
-def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment], sector_segments: Dict[Tuple[int, int], List[roads.Segment]]) -> bool:
+def local_constraints(inspect_seg: roads.Segment, city: City) -> bool:
+    """
+    Checks that the given segment conforms to the local constraints, or can be modified to fit.
+    :param inspect_seg: The road segment to be checked
+    :param city:
+    :return: True if the road can be placed in the city as it is or as it has been modified
+    """
     # watch_local.start()
 
     action = None
@@ -128,9 +141,9 @@ def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment],
 
     road_sectors = sectors.from_seg(inspect_seg)
     for containing_sector in road_sectors:
-        if containing_sector not in sector_segments:
+        if containing_sector not in city.sectors:
             continue
-        for line in sector_segments[containing_sector]:
+        for line in city.roads[containing_sector]:
             inter = inspect_seg.find_intersect(line)
 
             if last_snap <= SnapType.Cross and inter is not None and 0 < inter.main_factor < last_inter_factor:
@@ -138,7 +151,7 @@ def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment],
                 last_snap = SnapType.Cross
 
                 def action(other_seg=line, crossing=inter) -> bool:
-                    return snap_to_cross(inspect_seg, segments, sector_segments, other_seg, crossing, False)
+                    return snap_to_cross(inspect_seg, city, other_seg, crossing, False)
 
             if last_snap <= SnapType.End and vectors.distance(line.end, inspect_seg.end) < config.SNAP_VERTEX_RADIUS:
 
@@ -150,7 +163,7 @@ def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment],
                     last_ext_factor = inter.main_factor
 
                     def action(other_seg=line, crossing=inter) -> bool:
-                        return snap_to_cross(inspect_seg, segments, sector_segments, other_seg, crossing, True)
+                        return snap_to_cross(inspect_seg, city, other_seg, crossing, True)
                     last_snap = SnapType.Extend
                     
     if action is not None:
@@ -158,8 +171,10 @@ def local_constraints(inspect_seg: roads.Segment, segments: List[roads.Segment],
     return True
 
 
-# Returns true if the road forms an angle difference < the minimum with any of the roads in to_check
 def is_road_crowding(inspect_seg: roads.Segment, to_check: Set[roads.Segment]):
+    """
+    Determines if the given segment forms an angle less than the minimum angle difference with any road in to_check
+    """
     for road in to_check:
         if road is not inspect_seg:
             if roads.angle_between(inspect_seg, road) < config.MIN_ANGLE_DIFF:
@@ -168,9 +183,18 @@ def is_road_crowding(inspect_seg: roads.Segment, to_check: Set[roads.Segment]):
     return False
 
 
-def snap_to_cross(mod_road: roads.Segment, all_segments: List[roads.Segment],
-                  sector_segments: Dict[Tuple[int, int], List[roads.Segment]],
-                  other_road: roads.Segment, crossing: roads.Intersection, is_extend: bool) -> bool:
+def snap_to_cross(mod_road: roads.Segment, other_road: roads.Segment, crossing: roads.Intersection, is_extend: bool,
+                  city: City) -> bool:
+    """
+    Snaps the mod_road to the given intersection point and splits the other road at the intersection if the intersection
+    wouldn't create an almost zero-length road, or an angle less than the minimum angle difference
+    :param mod_road: The road that is being snapped to an itersection it makes with the other_road
+    :param other_road: The road to be split at its intersection with mod_road
+    :param crossing: The point where the two roads intersect
+    :param is_extend: True if the snap type should be Extend rather than Cross
+    :param city: The city to add the halves of the split other_road to
+    :return: True if mod_road can be placed in the city
+    """
     angle_diff = roads.angle_between(mod_road, other_road)
     min_diff = min(angle_diff, math.fabs(angle_diff - 180))
     if min_diff < config.MIN_ANGLE_DIFF:
@@ -212,8 +236,8 @@ def snap_to_cross(mod_road: roads.Segment, all_segments: List[roads.Segment],
     other_road.parent = split_half
     other_road.links_s.add(split_half)
 
-    all_segments.append(split_half)
-    sectors.add(split_half, sector_segments)
+    city.roads.append(split_half)
+    sectors.add(split_half, city.sectors)
 
     mod_road.links_e.add(other_road)
     mod_road.links_e.add(split_half)
@@ -227,6 +251,14 @@ def snap_to_cross(mod_road: roads.Segment, all_segments: List[roads.Segment],
 
 
 def snap_to_vert(mod_road: roads.Segment, other_road: roads.Segment, end: bool, too_close: bool) -> bool:
+    """
+    Snaps the mod_road's end to an existing intersection at the start or end of other_road
+    :param mod_road: The road to modify
+    :param other_road: The road to snap mod_road to
+    :param end: If mod_road should snap to other_road's end rather than start
+    :param too_close: If the snap is happening because a crossing would create too small of a road
+    :return: True if mod_road can be placed in the city
+    """
     if end:
         linking_point = other_road.end
         examine_links = other_road.links_e

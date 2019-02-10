@@ -178,6 +178,12 @@ def main():
 
 
 def road_near_point(world_pos: Tuple[float, float], city: generation.City) -> Optional[roads.Segment]:
+    """
+    Gets the closest road to the given point within 100 units
+    :param world_pos: The world-position to look around
+    :param city: A city with sectors and roads to search
+    :return: The nearest road if there is one within 100 units of the point, None otherwise
+    """
     closest: Tuple[roads.Segment, float] = (None, 9999)
     found_road = None
     examine_sectors = sectors.from_point(world_pos, 100)
