@@ -135,7 +135,7 @@ def main():
 
         # Drawing
         if debug.SHOW_HEATMAP:
-            drawing.draw_heatmap(50, screen_data)
+            drawing.draw_heatmap(50, city, screen_data)
         if debug.SHOW_SECTORS:
             drawing.draw_sectors(screen_data)
         if debug.SHOW_ISOLATE_SECTOR and selection is not None:
@@ -157,7 +157,7 @@ def main():
         drawing.draw_roads_path(path_data, screen_data)
 
         if debug.SHOW_INFO:
-            debug_labels = debug.labels(screen_data, input_data, path_data, selection)
+            debug_labels = debug.labels(screen_data, input_data, path_data, selection, city)
 
             for x in range(len(debug_labels[0])):
                 screen_data.screen.blit(

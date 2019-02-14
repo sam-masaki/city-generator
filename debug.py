@@ -15,7 +15,7 @@ class RoadViews(enum.Enum):
 Selection = collections.namedtuple("Selection", "road, connections, start_ids, end_ids, selected_sectors")
 
 
-def labels(screen_data, input_data, path_data, selection):
+def labels(screen_data, input_data, path_data, selection, city):
     mouse_world_pos = drawing.screen_to_world(input_data.pos, screen_data.pan, screen_data.zoom)
 
     debug_labels_left = []
@@ -23,7 +23,7 @@ def labels(screen_data, input_data, path_data, selection):
 
     debug_labels_left.append("Pointer (screen): {}".format(str(input_data.pos)))
     debug_labels_left.append("    (world): {}".format(mouse_world_pos))
-    debug_labels_left.append("    pop_at: {}".format(population.at_point(mouse_world_pos)))
+    debug_labels_left.append("    pop_at: {}".format(city.pop.at_point(mouse_world_pos)))
     debug_labels_left.append("    sec_at: {}".format(sectors.containing_sector(mouse_world_pos)))
     debug_labels_left.append("Pan: {}".format(screen_data.pan))
     debug_labels_left.append("Zoom: {}".format(str(screen_data.zoom)))

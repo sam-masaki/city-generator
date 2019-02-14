@@ -13,7 +13,7 @@ from typing import List, Dict, Tuple, Set
 
 watch_total = Stopwatch()
 
-City = collections.namedtuple("City", "roads, sectors")
+City = collections.namedtuple("City", "roads, sectors, pop")
 
 
 def generate(manual_seed: int = None) -> City:
@@ -29,13 +29,15 @@ def generate(manual_seed: int = None) -> City:
     else:
         seed = time.process_time()
     random.seed(seed)
+    pop_seed = (random.randrange(-1, 1) * 1000000000,
+                random.randrange(-1, 1) * 1000000000)
 
     print("Generating {} segments with seed: {}".format(config.MAX_SEGS, seed))
 
     road_queue = roads.Queue()
     road_queue.push(roads.Segment((0, 0), (config.HIGHWAY_LENGTH, 0), True))
 
-    city = City([], {})
+    city = City([], {}, population.Heatmap(pop_seed))
 
     while not road_queue.is_empty() and len(city.roads) <= config.MAX_SEGS:
         seg = road_queue.pop()
@@ -46,7 +48,7 @@ def generate(manual_seed: int = None) -> City:
             city.roads.append(seg)
             sectors.add(seg, city.sectors)
 
-            new_segments = global_goals(seg)
+            new_segments = global_goals(seg, city)
             for new_seg in new_segments:
                 new_seg.t += seg.t + 1
                 road_queue.push(new_seg)
@@ -69,12 +71,13 @@ def branch_deviation() -> int:
                           config.BRANCH_MAX_ANGLE_DEV)
 
 
-def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
+def global_goals(previous_segment: roads.Segment, city: City) -> List[roads.Segment]:
     """
     Takes a road that has been placed in the city, and generates new roads
         (branches & extensions) from it
     :param previous_segment: Road to generate continuations from.
         Assumed to already be settled
+    :param heatmap: The population heatmap object to base road generation on
     :return: a list of the newly generated roads
     """
     new_segments = []
@@ -83,12 +86,12 @@ def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
         return new_segments
 
     straight_seg = previous_segment.make_extension(0)
-    straight_pop = population.at_line(straight_seg)
+    straight_pop = city.pop.at_line(straight_seg)
 
     # Extend the current highway, tending towards higher populations
     if previous_segment.is_highway:
         wiggle_seg = previous_segment.make_extension(highway_deviation())
-        wiggle_pop = population.at_line(wiggle_seg)
+        wiggle_pop = city.pop.at_line(wiggle_seg)
 
         if wiggle_pop > straight_pop:
             new_segments.append(wiggle_seg)
@@ -106,11 +109,11 @@ def global_goals(previous_segment: roads.Segment) -> List[roads.Segment]:
                                                         True)
             new_segments.append(branch)
     # Always create a street extension if this is a street
-    elif straight_pop > config.STREET_EXTEND_POP:
+    elif straight_pop > random.uniform(0, config.STREET_EXTEND_POP):
         new_segments.append(straight_seg)
 
     # Sometimes create a street branch, delaying branches from highways
-    if (straight_pop > config.STREET_BRANCH_POP
+    if (straight_pop > random.uniform(0, config.STREET_BRANCH_POP)
             and random.random() < config.STREET_BRANCH_CHANCE):
         angle = (90 * random.randrange(-1, 2, 2)) + branch_deviation()
         delay = 5 if previous_segment.is_highway else 0

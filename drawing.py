@@ -6,6 +6,7 @@ import pygame
 import math
 import population
 import vectors
+import generation
 import roads
 from typing import Tuple, List
 
@@ -117,7 +118,7 @@ def draw_road(road: roads.Segment, color: Tuple[int, int, int], width: int, data
     pygame.draw.line(data.screen, color, world_to_screen(road.start, data.pan, data.zoom), world_to_screen(road.end, data.pan, data.zoom), width)
 
 
-def draw_heatmap(square_size: int, data: ScreenData):
+def draw_heatmap(square_size: int, city: generation.City, data: ScreenData):
     """ Draws the population heatmap to the screen in the given ScreenData with """
     x_max = math.ceil(config.SCREEN_RES[0] / square_size) + 1
     y_max = math.ceil(config.SCREEN_RES[1] / square_size) + 1
@@ -128,9 +129,8 @@ def draw_heatmap(square_size: int, data: ScreenData):
                             y * square_size)
             world_point = screen_to_world(screen_point, data.pan, data.zoom)
 
-            intensity = population.at_point(world_point)
-            color = (0, max(min(intensity * 100, 255), 0), 0)
-
+            intensity = city.pop.at_point(world_point)
+            color = (0, max(min(intensity * 83, 255), 0), 0)
             pos = (screen_point[0] - (square_size / 2), screen_point[1] - (square_size / 2))
             dim = (square_size, square_size)
 
