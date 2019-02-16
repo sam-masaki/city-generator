@@ -74,6 +74,10 @@ def main():
                 config.SCREEN_RES = event.dict["size"]
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_g:
+                    debug.SHOW_ROAD_ORDER = False
+                    road_labels = []
+                    selection = None
+                    path_data = pathing.PathData()
                     city = generation.generate()
                 # Debug Views
                 elif event.key == pygame.K_1:
