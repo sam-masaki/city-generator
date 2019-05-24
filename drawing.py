@@ -44,15 +44,22 @@ class ScreenData:
         return
 
 
+def init():
+    global font
+    font = pygame.font.SysFont("gohufont, terminusttf, couriernew", 14)
+
+
 def world_to_screen(world_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
-    """ Converts world coordinates to screen coordinates using the pan and zoom of the screen """
+    """ Converts world coordinates to screen coordinates using the pan and
+    zoom of the screen """
     result = ((world_pos[0] * zoom) + pan[0],
               (world_pos[1] * zoom) + pan[1])
     return result
 
 
 def screen_to_world(screen_pos: tuple, pan: tuple, zoom: float) -> Tuple[float, float]:
-    """ Converts screen coordinates to world coordinates using the pan and zoom of the screen """
+    """ Converts screen coordinates to world coordinates using the pan and
+    zoom of the screen """
     result = (((screen_pos[0] - pan[0]) / zoom),
               ((screen_pos[1] - pan[1]) / zoom))
     return result
@@ -118,8 +125,25 @@ def draw_road(road: roads.Segment, color: Tuple[int, int, int], width: int, data
     pygame.draw.line(data.screen, color, world_to_screen(road.start, data.pan, data.zoom), world_to_screen(road.end, data.pan, data.zoom), width)
 
 
+def draw_label_world(label, data, justify):
+    label_pos = world_to_screen(label[1], data.pan, data.zoom)
+    draw_label_screen((label[0], label_pos), data, justify)
+
+
+def draw_label_screen(label, data, justify):
+    label_pos = label[1]
+    if -20 < label_pos[0] < config.SCREEN_RES[0] and \
+            -20 < label_pos[1] < config.SCREEN_RES[1]:
+        rendered_text = font.render(label[0], True, (255, 255, 255))
+        if justify == 0:
+            label_pos = (label_pos[0] - rendered_text.get_width() / 2, label_pos[1])
+        elif justify == -1:
+            label_pos = (label_pos[0] - rendered_text.get_width(), label_pos[1])
+        data.screen.blit(rendered_text, label_pos)
+
+
 def draw_heatmap(square_size: int, city: generation.City, data: ScreenData):
-    """ Draws the population heatmap to the screen in the given ScreenData with """
+    """ Draws the population heatmap to the screen in the given ScreenData """
     x_max = math.ceil(config.SCREEN_RES[0] / square_size) + 1
     y_max = math.ceil(config.SCREEN_RES[1] / square_size) + 1
 
