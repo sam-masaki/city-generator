@@ -48,7 +48,7 @@ def generate(manual_seed: int = None) -> City:
             city.roads.append(seg)
             sectors.add(seg, city.sectors)
 
-            new_segments = global_goals(seg, city)
+            new_segments = global_goals(seg, city.pop)
             for new_seg in new_segments:
                 new_seg.t += seg.t + 1
                 road_queue.push(new_seg)
@@ -71,7 +71,8 @@ def branch_deviation() -> int:
                           config.BRANCH_MAX_ANGLE_DEV)
 
 
-def global_goals(previous_segment: roads.Segment, city: City) -> List[roads.Segment]:
+def global_goals(previous_segment: roads.Segment,
+                 heatmap: 'population.Heatmap') -> List[roads.Segment]:
     """
     Takes a road that has been placed in the city, and generates new roads
         (branches & extensions) from it
@@ -86,12 +87,12 @@ def global_goals(previous_segment: roads.Segment, city: City) -> List[roads.Segm
         return new_segments
 
     straight_seg = previous_segment.make_extension(0)
-    straight_pop = city.pop.at_line(straight_seg)
+    straight_pop = heatmap.at_line(straight_seg)
 
     # Extend the current highway, tending towards higher populations
     if previous_segment.is_highway:
         wiggle_seg = previous_segment.make_extension(highway_deviation())
-        wiggle_pop = city.pop.at_line(wiggle_seg)
+        wiggle_pop = heatmap.at_line(wiggle_seg)
 
         if wiggle_pop > straight_pop:
             new_segments.append(wiggle_seg)
@@ -193,7 +194,8 @@ def local_constraints(inspect_seg: roads.Segment, city: City) -> bool:
 
 def is_road_crowding(inspect_seg: roads.Segment, to_check: Set[roads.Segment]):
     """
-    Determines if the given segment forms an angle less than the minimum angle difference with any road in to_check
+    Determines if the given segment forms an angle less than the minimum
+    angle difference with any road in to_check
     """
     for road in to_check:
         if road is not inspect_seg:
@@ -206,12 +208,13 @@ def is_road_crowding(inspect_seg: roads.Segment, to_check: Set[roads.Segment]):
 def snap_to_cross(mod_road: roads.Segment, other_road: roads.Segment,
                   crossing: roads.Intersection, city: City) -> bool:
     """
-    Snaps the mod_road to the given intersection point and splits the other road at the intersection if the intersection
-    wouldn't create an almost zero-length road, or an angle less than the minimum angle difference
-    :param mod_road: The road that is being snapped to an itersection it makes with the other_road
+    Snaps the mod_road to the given intersection point and splits the other
+    road at the intersection if the intersection wouldn't create an almost
+    zero-length road, or an angle less than the minimum angle difference
+    :param mod_road: The road that is being snapped to an intersection it has
+    with other_road
     :param other_road: The road to be split at its intersection with mod_road
     :param crossing: The point where the two roads intersect
-    :param is_extend: True if the snap type should be Extend rather than Cross
     :param city: The city to add the halves of the split other_road to
     :return: True if mod_road can be placed in the city
     """
@@ -274,11 +277,13 @@ def snap_to_cross(mod_road: roads.Segment, other_road: roads.Segment,
 def snap_to_vert(mod_road: roads.Segment, other_road: roads.Segment, end: bool,
                  too_close: bool) -> bool:
     """
-    Snaps the mod_road's end to an existing intersection at the start or end of other_road
+    Snaps the mod_road's end to an existing intersection at the start or
+    the end of other_road
     :param mod_road: The road to modify
     :param other_road: The road to snap mod_road to
     :param end: If mod_road should snap to other_road's end rather than start
-    :param too_close: If the snap is happening because a crossing would create too small of a road
+    :param too_close: If the snap is happening because a crossing would create
+    too small of a road
     :return: True if mod_road can be placed in the city
     """
     if end:
