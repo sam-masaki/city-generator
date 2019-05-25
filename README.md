@@ -1,6 +1,8 @@
 # City Generator
 This is a script that creates procedural city maps.
 
+![A screenshot](screenshot.png)
+
 # About
 This was originally inspired by Introversion Software's city generator, and based on 
 [this paper by Parish & Müller](https://graphics.ethz.ch/Downloads/Publications/Papers/2001/p_Par01.pdf)
