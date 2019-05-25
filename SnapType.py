@@ -2,12 +2,14 @@ from enum import IntEnum, auto
 
 
 class SnapType(IntEnum):
-    No = auto()
-    Extend = auto()
-    End = auto()
-    Cross = auto()
+    # Ordered by priority from low to high
+    No = 0
+    Extend = 1
+    End = 2
+    Cross = 3
 
-    CrossTooClose = auto()
-    Split = auto()
-    DebugDeleted = auto()
-    Shorten = auto()
+    # Special SnapTypes, no priority
+    CrossTooClose = 10
+    Split = 11
+    DebugDeleted = 12
+    Shorten = 13
