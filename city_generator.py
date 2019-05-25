@@ -38,6 +38,10 @@ class InputData:
         return self._prev_pressed
 
 
+Selection = collections.namedtuple(
+    "Selection", "road, connections, start_ids, end_ids, selected_sectors")
+
+
 def main():
     pygame.init()
     drawing.init()
@@ -63,9 +67,7 @@ def main():
 
         input_data.pos = pygame.mouse.get_pos()
         input_data.pressed = pygame.mouse.get_pressed()
-
         prev_time = pygame.time.get_ticks()
-        screen_data.screen.fill((0, 0, 0))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -96,7 +98,8 @@ def main():
                 elif event.key == pygame.K_v:
                     pathing.dijkstra(path_data, city.roads)
                 # Debug Views
-                handle_keys_debug(event.key)
+                else:
+                    handle_keys_debug(event.key)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Zooming
                 if event.button == 4:
@@ -113,7 +116,7 @@ def main():
                 input_data.drag_prev_pos = input_data.pos
             else:
                 if input_data.pos == input_data.drag_start:  # Select road
-                    selection = debug.selection_from_road(
+                    selection = selection_from_road(
                         road_near_point(input_data.drag_start,
                                         screen_data, city))
                 # Clear out drag information
@@ -125,6 +128,7 @@ def main():
                 input_data.drag_prev_pos = input_data.pos
 
         # Drawing
+        screen_data.screen.fill((0, 0, 0))
         if debug.SHOW_HEATMAP:
             drawing.draw_heatmap(50, city, screen_data)
         if debug.SHOW_SECTORS:
@@ -226,6 +230,25 @@ def road_near_point(screen_pos: Tuple[float, float],
                 found_road = closest[0]
 
     return found_road
+
+
+def selection_from_road(selected_road):
+    if selected_road is not None:
+        start_ids = []
+        end_ids = []
+        connections = []
+        selected_sectors = sectors.from_seg(selected_road)
+        for road in selected_road.links_s:
+            start_ids.append(road.global_id)
+            connections.append(road)
+        for road in selected_road.links_e:
+            end_ids.append(road.global_id)
+            connections.append(road)
+        selection = Selection(selected_road, connections, start_ids, end_ids, selected_sectors)
+    else:
+        selection = None
+
+    return selection
 
 
 if __name__ == "__main__":

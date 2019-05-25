@@ -12,9 +12,6 @@ class RoadViews(enum.Enum):
     Branches = enum.auto()
 
 
-Selection = collections.namedtuple("Selection", "road, connections, start_ids, end_ids, selected_sectors")
-
-
 def labels(screen_data, input_data, path_data, selection, city):
     mouse_world_pos = drawing.screen_to_world(input_data.pos, screen_data.pan, screen_data.zoom)
 
@@ -49,25 +46,6 @@ def labels(screen_data, input_data, path_data, selection, city):
     debug_labels_right.append("# of segments: {}".format(str(config.MAX_SEGS)))
 
     return debug_labels_left, debug_labels_right
-
-
-def selection_from_road(selected_road):
-    if selected_road is not None:
-        start_ids = []
-        end_ids = []
-        connections = []
-        selected_sectors = sectors.from_seg(selected_road)
-        for road in selected_road.links_s:
-            start_ids.append(road.global_id)
-            connections.append(road)
-        for road in selected_road.links_e:
-            end_ids.append(road.global_id)
-            connections.append(road)
-        selection = Selection(selected_road, connections, start_ids, end_ids, selected_sectors)
-    else:
-        selection = None
-
-    return selection
 
 
 SHOW_INFO = True
