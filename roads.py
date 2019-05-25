@@ -36,7 +36,7 @@ class Segment:
         self.parent = None
         self.links_s = set()
         self.links_e = set()
-        self.settled = False
+        self.connected = False
 
         self.global_id = Segment.seg_id
 
@@ -75,8 +75,8 @@ class Segment:
 
     def make_extension(self, deviation: float) -> 'Segment':
         """
-        Builds a new segment that starts at the end of this segment and has the same length and is_highway
-
+        Builds a new segment that starts at the end of this segment and
+        has the same length and is_highway value
         :param deviation: Angle in deg of deviation from this segment
         :return: The new segment
         """
@@ -94,7 +94,14 @@ class Segment:
         return angle
 
     def connect_links(self):
-        """ Adds this road to the links of each road this is connected to """
+        """
+        Adds this road to the links of each road this is connected to
+        """
+
+        # Unconnected roads have no connections going to them,
+        # and a set of one-way links to roads at its end
+
+        # Link to parent and siblings
         if self.parent is not None:
             for road in self.parent.links_e:
                 if self.start == road.end:
@@ -106,13 +113,14 @@ class Segment:
             self.parent.links_e.add(self)
             self.links_s.add(self.parent)
 
+        # Link to roads at self.end
         for road in self.links_e:
             if self.end == road.start:
                 road.links_s.add(self)
             elif self.end == road.end:
                 road.links_e.add(self)
 
-        self.settled = True
+        self.connected = True
 
     def point_at(self, factor: float) -> Tuple[float, float]:
         """
