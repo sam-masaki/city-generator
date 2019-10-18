@@ -90,6 +90,8 @@ class Segment:
         angle = math.degrees(math.atan2(self.end[1] - self.start[1], self.end[0] - self.start[0]))
         if angle < 0:
             angle += 360
+        if angle == 360:
+            angle = 0
 
         return angle
 
@@ -161,13 +163,64 @@ class Segment:
 
 def angle_between(road1: Segment, road2: Segment) -> float:
     """
-    Gets the smaller angle in deg formed by two connected roads
+    Gets the smaller angle in deg formed by two connected roads.
+    Always returns a positive float
     """
-    diff = math.fabs(road1.dir() - road2.dir())
 
-    if road1.start != road2.start and road1.end != road2.end:
-        diff -= 180
-        if diff < 0:
-            diff += 360
+    len1 = road1.length()
+    len2 = road2.length()
 
-    return min(diff, 360 - diff)
+    # Find the third line in the triangle formed by lines 1 & 2
+    if road1.start == road2.start:
+        len3 = vectors.distance(road1.end, road2.end)
+    elif road1.start == road2.end:
+        len3 = vectors.distance(road1.end, road2.start)
+    elif road1.end == road2.start:
+        len3 = vectors.distance(road1.start, road2.end)
+    elif road1.end == road2.end:
+        len3 = vectors.distance(road1.start, road2.start)
+
+    # Calculate the angle between the roads using the law of cosines
+    num = math.pow(len1, 2) + math.pow(len2, 2) - math.pow(len3, 2)
+    den = 2 * len1 * len2
+
+    quo = num/den
+
+    # Avoid errors from floating point inaccuracy
+    if quo > 1:
+        quo = 1
+    elif quo < -1:
+        quo = -1
+
+    res = math.degrees(math.acos(quo))
+
+    return res
+
+
+def angle_between_ccw(road1: Segment, road2: Segment) -> float:
+    """
+    Gets the angle between road1 and road2 in a counterclockwise direction
+    """
+
+    if road1.start == road2.start:
+        vect1 = vectors.sub(road1.end, road1.start)
+        vect2 = vectors.sub(road2.end, road1.start)
+    elif road1.start == road2.end:
+        vect1 = vectors.sub(road1.end, road1.start)
+        vect2 = vectors.sub(road2.start, road1.start)
+    elif road1.end == road2.start:
+        vect1 = vectors.sub(road1.start, road1.end)
+        vect2 = vectors.sub(road2.end, road1.end)
+    elif road1.end == road2.end:
+        vect1 = vectors.sub(road1.start, road1.end)
+        vect2 = vectors.sub(road2.start, road1.end)
+
+    dot = vectors.dot(vect1, vect2)
+    det = vectors.determinant(vect1, vect2)
+
+    deg = math.degrees(math.atan2(det, dot))
+
+    if -180 <= deg <= 0:
+        deg += 360
+
+    return deg

@@ -222,12 +222,8 @@ def snap_to_cross(mod_road: roads.Segment, other_road: roads.Segment,
     :param city: The city to add the halves of the split other_road to
     :return: True if mod_road can be placed in the city
     """
-    angle_diff = roads.angle_between(mod_road, other_road)
-    min_diff = min(angle_diff, math.fabs(angle_diff - 180))
-    if min_diff < config.MIN_ANGLE_DIFF:
-        return False
 
-    # Fail if the crossing would produce a (nearly) zero-length road
+    # Fail if the crossing would produce a nearly zero-length road
     if round(crossing.main_factor, 5) == 0:
         return False
     if round(crossing.main_factor, 5) == 1:
@@ -300,8 +296,8 @@ def snap_to_start(mod_road: roads.Segment, other_road: roads.Segment,
 
 def snap_to_point(mod_road, other_road, snap_type, linking_point,
                   links_to_examine):
-    if is_road_crowding(mod_road, links_to_examine.union({other_road})):
-        return False
+    # if is_road_crowding(mod_road, links_to_examine.union({other_road})):
+    #     return False
 
     mod_road.end = linking_point
 

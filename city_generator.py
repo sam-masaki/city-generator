@@ -11,6 +11,7 @@ import vectors
 import config
 import debug
 import generation
+import build_gen
 import drawing
 import collections
 from Stopwatch import Stopwatch
@@ -52,6 +53,8 @@ def main():
     path_data = pathing.PathData()
     selection = None
 
+    lots = []
+
     city = generation.generate()
     city_labels = []
     for road in city.roads:
@@ -86,6 +89,8 @@ def main():
                     for road in city.roads:
                         city_labels.append((str(road.global_id),
                                             road.point_at(0.5)))
+                if event.key == pygame.K_b:
+                    lots = build_gen.gen_lots(city)
                 # Pathing
                 elif event.key == pygame.K_z:
                     path_data.start = road_near_point(input_data.pos,
@@ -133,6 +138,19 @@ def main():
             drawing.draw_heatmap(50, city, screen_data)
         if debug.SHOW_SECTORS:
             drawing.draw_sectors(screen_data)
+
+        color = (125, 255, 50)
+        for poly in lots:
+            temp = []
+            for point in poly:
+                temp.append(drawing.world_to_screen(point, screen_data.pan, screen_data.zoom))
+            pygame.draw.polygon(screen_data.screen, color, temp)
+            color = (color[0], color[1]-11, color[2] + 7)
+            if color[1] < 0:
+                color = (color[0], 255, color[2])
+            if color[2] > 255:
+                color = (color[0], color[1], 0)
+
 
         # Draw roads
         if debug.SHOW_ISOLATE_SECTOR and selection is not None:
